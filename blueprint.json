@@ -1,0 +1,36 @@
+{
+  "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+  "preferredVersions": {
+    "php": "8.2",
+    "wp": "latest"
+  },
+  "phpExtensionBundles": ["kitchen-sink"],
+  "features": {
+    "networking": false
+  },
+  "steps": [
+    {
+      "step": "login",
+      "username": "admin",
+      "password": "password"
+    },
+    {
+      "step": "installPlugin",
+      "pluginZipFile": {
+        "resource": "url",
+        "url": "https://github.com/dexit/testing231/archive/refs/heads/main.zip"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "runPHP",
+      "code": "<?php\nrequire '/wordpress/wp-load.php';\n$post_id = wp_insert_post( array( 'post_title' => 'Hello World Demo', 'post_type' => 'microplugin', 'post_status' => 'draft', 'post_content' => '' ) );\nif ( $post_id && ! is_wp_error( $post_id ) ) {\n    $fn = 'cem_microplugin_callback_' . $post_id;\n    $lines = array(\n        '<?php',\n        'function ' . $fn . '( WP_REST_Request $request ): WP_REST_Response {',\n        '    return CEM::response( array(',\n        '        \"message\" => \"Hello from WordPress Playground!\",',\n        '        \"method\"  => CEM::method(),',\n        '        \"time\"    => CEM::now(),',\n        '        \"user_id\" => CEM::user_id()',\n        '    ) );',\n        '}'\n    );\n    wp_update_post( array( 'ID' => $post_id, 'post_content' => implode( \"\\n\", $lines ), 'post_status' => 'publish' ) );\n    Microplugins::dump( $post_id );\n    update_option( 'cem_custom_endpoints', array( array(\n        'slug'           => 'hello',\n        'methods'        => 'GET',\n        'capability'     => 'read',\n        'microplugin_id' => $post_id,\n        'args'           => '',\n        'async'          => false,\n        'max_attempts'   => 3\n    ) ) );\n}"
+    },
+    {
+      "step": "redirect",
+      "url": "/wp-admin/options-general.php?page=custom-endpoints-manager"
+    }
+  ]
+}
