@@ -11,10 +11,12 @@
  * License:           GPL v2 or later
  * Text Domain:       custom-endpoints-manager
  * Domain Path:       /languages
+ *
+ * @package Custom_Endpoints_Manager
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-    exit;
+	exit;
 }
 
 define( 'CEM_VERSION', '1.0.0' );
@@ -29,10 +31,15 @@ define( 'MICROPLUGINS_URI', CEM_PLUGIN_URL . 'microplugins/' );
 require_once CEM_PLUGIN_DIR . 'includes/class-custom-endpoints-manager.php';
 require_once MICROPLUGINS_DIR . '/class-microplugins.php';
 
+/**
+ * Bootstrap the plugin.
+ *
+ * @since 1.0.0
+ */
 function run_custom_endpoints_manager() {
-    $plugin = new Custom_Endpoints_Manager();
-    $plugin->run();
-    Microplugins::get_instance();
+	$plugin = new Custom_Endpoints_Manager();
+	$plugin->run();
+	Microplugins::get_instance();
 }
 run_custom_endpoints_manager();
 
