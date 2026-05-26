@@ -11,29 +11,47 @@
  *   Capability:  read
  *   Microplugin: (select this post)
  *
- * Test: GET /wp-json/cem/v1/hello-world
+ * Test: GET /wp-json/cem/v1/hello-world?name=Alice
+ *
+ * ─── Context-aware template tags (injected automatically) ───────────────────
+ * CEM::param('key', $default) — sanitized request param
+ * CEM::params()               — all request params as array
+ * CEM::body()                 — decoded JSON request body (POST/PUT)
+ * CEM::header('X-Key')        — request header value
+ * CEM::method()               — HTTP method (GET/POST/…)
+ * CEM::route()                — REST route string
+ * CEM::user()                 — WP_User|null for current user
+ * CEM::user_id()              — current user ID (0 = guest)
+ * CEM::option($key)           — get_option() shorthand
+ * CEM::now()                  — current_time('mysql')
+ * CEM::site_url($path)        — site_url() shorthand
+ * CEM::response($data, 200)   — WP_REST_Response factory
+ * CEM::error($code, $msg, 400)— WP_Error factory
+ *
+ * ─── Function library shorthand ─────────────────────────────────────────────
+ * Lib:: is an alias for CEM_Function_Library — e.g. Lib::extract_field(…)
+ * Browse all 16 helpers: GET /wp-json/cem/v1/functions/library
  */
-
-if ( ! defined( 'ABSPATH' ) ) {
-    exit;
-}
 
 /**
  * Replace 123 with the actual Post ID of this Microplugin.
  *
  * @param WP_REST_Request $request
- * @return array
+ * @return array|WP_REST_Response|WP_Error
  */
 function cem_microplugin_callback_123( WP_REST_Request $request ) {
-    $name = sanitize_text_field( $request->get_param( 'name' ) );
+    $name = sanitize_text_field( CEM::param( 'name', '' ) );
 
-    return array(
-        'message'         => $name ? "Hello, {$name}!" : 'Hello, World!',
-        'route'           => $request->get_route(),
-        'method'          => $request->get_method(),
-        'current_user_id' => get_current_user_id(),
-        'timestamp'       => current_time( 'mysql' ),
-        // Full WordPress context is available:
-        // get_option(), $wpdb queries, WP_Query, etc.
-    );
+    // Lib:: is CEM_Function_Library — dot-path extraction, validation helpers, etc.
+    $tags = Lib::split_string( CEM::param( 'tags', '' ) );  // "php,rest,wp" → ['php','rest','wp']
+
+    return CEM::response( array(
+        'message'    => $name ? "Hello, {$name}!" : 'Hello, World!',
+        'tags'       => $tags,
+        'route'      => CEM::route(),
+        'method'     => CEM::method(),
+        'user_id'    => CEM::user_id(),
+        'timestamp'  => CEM::now(),
+        'site'       => CEM::site_url(),
+    ) );
 }

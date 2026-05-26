@@ -53,6 +53,9 @@ class CEM_Code_Executor {
                     throw new Exception( "Function '{$function_name}' not found after include." );
                 }
 
+                $cem_class = "{$namespace}\\CEM";
+                $cem_class::_init( $request );
+
                 $memory_before  = memory_get_usage( true );
                 $start_time     = microtime( true );
 
@@ -82,7 +85,7 @@ class CEM_Code_Executor {
     }
 
     /**
-     * Wrap PHP code in a unique namespace to prevent function collisions.
+     * Wrap PHP code in a unique namespace, injecting CEM template tag class and WP use-imports.
      */
     private function wrap_code( string $code, string $namespace ): string {
         $code = ltrim( $code );
@@ -91,7 +94,105 @@ class CEM_Code_Executor {
         } elseif ( strncmp( $code, '<?', 2 ) === 0 ) {
             $code = substr( $code, 2 );
         }
-        return "<?php\nnamespace {$namespace};\n\n" . $code;
+
+        $preamble = <<<'PREAMBLE'
+
+use \WP_REST_Request;
+use \WP_REST_Response;
+use \WP_Error;
+use \WP_Post;
+use \WP_User;
+use \WP_Query;
+use \CEM_Function_Library as Lib;
+
+/**
+ * Context-aware template tag facade injected by the executor.
+ * Available in every microplugin — no import required.
+ *
+ * CEM::param('name')          — get request param (sanitized)
+ * CEM::params()               — all request params as array
+ * CEM::body()                 — decoded JSON request body
+ * CEM::header('X-My-Header')  — request header value
+ * CEM::method()               — HTTP method string (GET/POST/…)
+ * CEM::route()                — REST route string (/cem/v1/…)
+ * CEM::user()                 — WP_User for current user or null
+ * CEM::user_id()              — current user ID (0 = not logged in)
+ * CEM::option($key,$default)  — get_option() shorthand
+ * CEM::now($format)           — current_time() shorthand
+ * CEM::site_url($path)        — site_url() shorthand
+ * CEM::response($data,$code)  — new WP_REST_Response($data,$code)
+ * CEM::error($code,$msg,$http)— new WP_Error with status
+ */
+class CEM {
+    private static $req;
+
+    public static function _init( \WP_REST_Request $r ): void {
+        self::$req = $r;
+    }
+
+    public static function param( string $key, $default = null ) {
+        $val = self::$req->get_param( $key );
+        return null !== $val ? $val : $default;
+    }
+
+    public static function params(): array {
+        return (array) self::$req->get_params();
+    }
+
+    public static function body(): array {
+        $raw = self::$req->get_body();
+        if ( '' === trim( $raw ) ) {
+            return array();
+        }
+        $decoded = json_decode( $raw, true );
+        return is_array( $decoded ) ? $decoded : array();
+    }
+
+    public static function header( string $key ): ?string {
+        return self::$req->get_header( $key );
+    }
+
+    public static function method(): string {
+        return self::$req->get_method();
+    }
+
+    public static function route(): string {
+        return self::$req->get_route();
+    }
+
+    public static function user(): ?\WP_User {
+        $id = get_current_user_id();
+        return $id ? get_userdata( $id ) : null;
+    }
+
+    public static function user_id(): int {
+        return get_current_user_id();
+    }
+
+    public static function option( string $key, $default = false ) {
+        return get_option( $key, $default );
+    }
+
+    public static function now( string $format = 'mysql' ): string {
+        return current_time( $format );
+    }
+
+    public static function site_url( string $path = '' ): string {
+        return site_url( $path );
+    }
+
+    public static function response( $data, int $status = 200 ): \WP_REST_Response {
+        return new \WP_REST_Response( $data, $status );
+    }
+
+    public static function error( string $code, string $message, int $status = 400 ): \WP_Error {
+        return new \WP_Error( $code, $message, array( 'status' => $status ) );
+    }
+}
+
+PREAMBLE;
+
+        return "<?php\nnamespace {$namespace};\n" . $preamble . $code;
     }
 
     /**
