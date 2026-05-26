@@ -1,0 +1,39 @@
+<?php
+/**
+ * EXAMPLE MICROPLUGIN — copy this code into a new Microplugin post in the WP admin.
+ *
+ * After publishing, note the Post ID (e.g. 123). The callback function name
+ * MUST be: cem_microplugin_callback_{POST_ID}
+ *
+ * Then go to Settings > Custom Endpoints and create an endpoint with:
+ *   Slug:        hello-world
+ *   Methods:     GET
+ *   Capability:  read
+ *   Microplugin: (select this post)
+ *
+ * Test: GET /wp-json/cem/v1/hello-world
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+/**
+ * Replace 123 with the actual Post ID of this Microplugin.
+ *
+ * @param WP_REST_Request $request
+ * @return array
+ */
+function cem_microplugin_callback_123( WP_REST_Request $request ) {
+    $name = sanitize_text_field( $request->get_param( 'name' ) );
+
+    return array(
+        'message'         => $name ? "Hello, {$name}!" : 'Hello, World!',
+        'route'           => $request->get_route(),
+        'method'          => $request->get_method(),
+        'current_user_id' => get_current_user_id(),
+        'timestamp'       => current_time( 'mysql' ),
+        // Full WordPress context is available:
+        // get_option(), $wpdb queries, WP_Query, etc.
+    );
+}
