@@ -11,7 +11,7 @@ if ( ! current_user_can( 'manage_options' ) ) {
 }
 
 $custom_endpoints = get_option( 'cem_custom_endpoints', array() );
-// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized immediately below.
+// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Recommended -- sanitized immediately below; read-only tab selector.
 $active_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'endpoints';
 
 $microplugins_posts = get_posts(
@@ -126,11 +126,46 @@ $microplugins_posts = get_posts(
 								<?php endforeach; ?>
 							</select>
 							<?php if ( $selected_mp_id ) : ?>
+								<?php
+								$mp_obj     = get_post( $selected_mp_id );
+								$cache_file = MICROPLUGINS_CACHE_DIR . '/' . absint( $selected_mp_id ) . '.php';
+								$cached     = file_exists( $cache_file );
+								$mp_status  = $mp_obj instanceof WP_Post ? $mp_obj->post_status : '';
+								$status_map = array(
+									'publish' => array(
+										'label' => 'Published',
+										'class' => 'cem-status-publish',
+									),
+									'pending' => array(
+										'label' => 'Pending',
+										'class' => 'cem-status-pending',
+									),
+									'draft'   => array(
+										'label' => 'Draft',
+										'class' => 'cem-status-draft',
+									),
+								);
+								$status_cfg = isset( $status_map[ $mp_status ] ) ? $status_map[ $mp_status ] : array(
+									'label' => ucfirst( $mp_status ),
+									'class' => 'cem-status-draft',
+								);
+								?>
 								<p class="description">
 									<?php
 									/* translators: %s: PHP callback function name */
 									printf( esc_html__( 'Callback: %s', 'custom-endpoints-manager' ), '<code>cem_microplugin_callback_' . absint( $selected_mp_id ) . '</code>' );
 									?>
+								</p>
+								<p class="cem-mp-meta">
+									<span class="cem-mp-status <?php echo esc_attr( $status_cfg['class'] ); ?>"><?php echo esc_html( $status_cfg['label'] ); ?></span>
+									<?php if ( $cached ) : ?>
+										<span class="cem-mp-cache cem-mp-cache-ok" title="<?php esc_attr_e( 'Cache file exists', 'custom-endpoints-manager' ); ?>">&#10003; cached</span>
+									<?php else : ?>
+										<span class="cem-mp-cache cem-mp-cache-miss" title="<?php esc_attr_e( 'No cache file — publish the microplugin', 'custom-endpoints-manager' ); ?>">&#9888; no cache</span>
+									<?php endif; ?>
+									<?php if ( $mp_obj instanceof WP_Post ) : ?>
+										<a href="<?php echo esc_url( get_edit_post_link( $selected_mp_id ) ); ?>" target="_blank" class="cem-mp-edit-link"><?php esc_html_e( 'Edit &#8599;', 'custom-endpoints-manager' ); ?></a>
+									<?php endif; ?>
 								</p>
 							<?php endif; ?>
 						</td>

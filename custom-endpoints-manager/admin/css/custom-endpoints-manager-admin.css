@@ -1,35 +1,75 @@
 /* Custom Endpoints Manager — Admin Styles */
 
+/* ── Microplugin status / cache badges ─────────────────────────── */
+.cem-mp-meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 5px 0 0;
+	font-size: 11px;
+}
+
+.cem-mp-status {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 3px;
+	font-weight: 600;
+	color: #fff;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+}
+
+.cem-status-publish { background: #00a32a; }
+.cem-status-pending { background: #dba617; color: #1d2327; }
+.cem-status-draft   { background: #646970; }
+
+.cem-mp-cache {
+	font-size: 11px;
+}
+
+.cem-mp-cache-ok   { color: #00a32a; }
+.cem-mp-cache-miss { color: #d63638; }
+
+.cem-mp-edit-link {
+	font-size: 11px;
+	text-decoration: none;
+	color: #2271b1;
+}
+
+.cem-mp-edit-link:hover { text-decoration: underline; }
+
 #cem-endpoints-table th,
 #cem-endpoints-table td {
-    vertical-align: top;
-    padding: 8px 10px;
+	vertical-align: top;
+	padding: 8px 10px;
 }
 
 #cem-endpoints-table input[type="text"] {
-    width: 100%;
-    box-sizing: border-box;
+	width: 100%;
+	box-sizing: border-box;
 }
 
 #cem-endpoints-table input.small-text {
-    width: 80px;
+	width: 80px;
 }
 
 #cem-endpoints-table select {
-    width: 100%;
-    max-width: 260px;
+	width: 100%;
+	max-width: 260px;
 }
 
 #cem-endpoints-table .description {
-    font-size: 11px;
-    color: #666;
-    margin: 4px 0 0;
+	font-size: 11px;
+	color: #666;
+	margin: 4px 0 0;
 }
 
 #cem-endpoints-table .remove-endpoint {
-    margin-top: 4px;
+	margin-top: 4px;
 }
 
 #add-endpoint {
-    margin-top: 10px;
+	margin-top: 10px;
 }

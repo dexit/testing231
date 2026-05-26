@@ -1,65 +1,77 @@
-(function() {
-    if ( typeof ace === 'undefined' ) {
-        console.error( 'Ace editor not loaded.' );
-        return;
-    }
+/**
+ * Ace editor integration for Microplugins.
+ *
+ * @package Custom_Endpoints_Manager
+ */
 
-    var editor      = ace.edit( 'micropluginEditor' );
-    var PhpMode     = ace.require( 'ace/mode/php' ).Mode;
-    var selectTheme = document.getElementById( 'micropluginEditorThemeSelect' );
-    var fontSize    = document.getElementById( 'micropluginEditorFontSize' );
-    var postContent = document.getElementById( 'postContent' );
+(function () {
+	if ( typeof ace === 'undefined' ) {
+		console.error( 'Ace editor not loaded.' );
+		return;
+	}
 
-    if ( ! editor || ! selectTheme || ! fontSize || ! postContent ) {
-        console.error( 'Ace editor: required elements not found.' );
-        return;
-    }
+	var editor      = ace.edit( 'micropluginEditor' );
+	var PhpMode     = ace.require( 'ace/mode/php' ).Mode;
+	var selectTheme = document.getElementById( 'micropluginEditorThemeSelect' );
+	var fontSize    = document.getElementById( 'micropluginEditorFontSize' );
+	var postContent = document.getElementById( 'postContent' );
 
-    editor.session.setMode( new PhpMode() );
-    editor.session.setOption( 'useWorker', false );
-    editor.setShowPrintMargin( false );
-    editor.setValue( postContent.value );
-    editor.clearSelection();
+	if ( ! editor || ! selectTheme || ! fontSize || ! postContent ) {
+		console.error( 'Ace editor: required elements not found.' );
+		return;
+	}
 
-    // Attach PHP error annotations from hidden divs
-    var phpErrors   = document.getElementsByClassName( 'php-error' );
-    var annotations = [];
+	editor.session.setMode( new PhpMode() );
+	editor.session.setOption( 'useWorker', false );
+	editor.setShowPrintMargin( false );
+	editor.setValue( postContent.value );
+	editor.clearSelection();
 
-    for ( var i = 0; i < phpErrors.length; i++ ) {
-        var err  = phpErrors[ i ];
-        var type = parseInt( err.getAttribute( 'data-type' ), 10 );
-        var line = parseInt( err.getAttribute( 'data-line' ), 10 ) - 1;
+	// Attach PHP error annotations from hidden divs.
+	var phpErrors      = document.getElementsByClassName( 'php-error' );
+	var phpErrorsCount = phpErrors.length;
+	var annotations    = [];
 
-        var fatalTypes = [ 1, 4, 16, 32, 64, 128 ];
-        annotations.push({
-            row    : line,
-            column : 0,
-            text   : err.getAttribute( 'data-message' ),
-            type   : fatalTypes.indexOf( type ) !== -1 ? 'error' : 'warning',
-        });
-    }
-    editor.getSession().setAnnotations( annotations );
+	for ( var i = 0; i < phpErrorsCount; i++ ) {
+		var err  = phpErrors[ i ];
+		var type = parseInt( err.getAttribute( 'data-type' ), 10 );
+		var line = parseInt( err.getAttribute( 'data-line' ), 10 ) - 1;
 
-    // Sync editor content back to the hidden textarea
-    editor.on( 'change', function() {
-        postContent.value = editor.getValue();
-    });
+		var fatalTypes = [ 1, 4, 16, 32, 64, 128 ];
+		annotations.push(
+			{
+				row    : line,
+				column : 0,
+				text   : err.getAttribute( 'data-message' ),
+				type   : fatalTypes.indexOf( type ) !== -1 ? 'error' : 'warning',
+			}
+		);
+	}
+	editor.getSession().setAnnotations( annotations );
 
-    function applyTheme() {
-        if ( selectTheme.value ) {
-            editor.setTheme( selectTheme.value );
-        }
-    }
+	// Sync editor content back to the hidden textarea.
+	editor.on(
+		'change',
+		function () {
+			postContent.value = editor.getValue();
+		}
+	);
 
-    function applyFontSize() {
-        if ( fontSize.value ) {
-            editor.setFontSize( parseInt( fontSize.value, 10 ) );
-        }
-    }
+	function applyTheme() {
+		if ( selectTheme.value ) {
+			editor.setTheme( selectTheme.value );
+		}
+	}
 
-    selectTheme.onchange = applyTheme;
-    fontSize.onchange    = applyFontSize;
+	function applyFontSize() {
+		if ( fontSize.value ) {
+			editor.setFontSize( parseInt( fontSize.value, 10 ) );
+		}
+	}
 
-    applyTheme();
-    applyFontSize();
+	selectTheme.onchange = applyTheme;
+	fontSize.onchange    = applyFontSize;
+
+	applyTheme();
+	applyFontSize();
 })();
