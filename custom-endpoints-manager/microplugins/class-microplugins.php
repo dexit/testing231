@@ -458,6 +458,8 @@ class Microplugins {
     }
 
     public static function activation_hook() {
+        CEM_Execution_Logger::install();
+
         global $wp_roles;
 
         $capabilities = array(

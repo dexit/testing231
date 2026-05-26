@@ -24,6 +24,7 @@
                 '<td><input type="text" name="cem_endpoints[' + index + '][capability]" value="" class="regular-text" placeholder="read" /></td>' +
                 '<td>' + buildMicropluginSelect( 'cem_endpoints[' + index + '][microplugin_id]' ) + '</td>' +
                 '<td><input type="text" name="cem_endpoints[' + index + '][args]" value="" class="regular-text" placeholder="id:integer,s:string" /></td>' +
+                '<td style="white-space:nowrap"><label><input type="checkbox" name="cem_endpoints[' + index + '][async]" value="1" /> Async</label><br><label style="font-size:11px">Attempts: <input type="number" name="cem_endpoints[' + index + '][max_attempts]" value="3" min="1" max="10" style="width:45px" /></label></td>' +
                 '<td><button type="button" class="button button-secondary remove-endpoint">' + cemI18n.remove + '</button></td>' +
                 '</tr>';
 

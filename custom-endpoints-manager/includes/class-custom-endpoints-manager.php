@@ -31,6 +31,10 @@ class Custom_Endpoints_Manager {
         require_once CEM_PLUGIN_DIR . 'includes/functions/class-validator.php';
         require_once CEM_PLUGIN_DIR . 'includes/functions/class-executor.php';
         require_once CEM_PLUGIN_DIR . 'includes/functions/class-library.php';
+        require_once CEM_PLUGIN_DIR . 'includes/class-cem-execution-logger.php';
+        require_once CEM_PLUGIN_DIR . 'includes/class-cem-async-processor.php';
+
+        CEM_Async_Processor::init();
 
         $this->loader = new Custom_Endpoints_Manager_Loader();
     }

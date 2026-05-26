@@ -22,6 +22,26 @@ class Custom_Endpoints_Manager_REST_Controller {
             'permission_callback' => function() { return current_user_can( 'read' ); },
         ) );
 
+        register_rest_route( 'cem/v1', '/jobs', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array( $this, 'list_jobs' ),
+            'permission_callback' => function() { return current_user_can( 'manage_options' ); },
+        ) );
+
+        register_rest_route( 'cem/v1', '/jobs/(?P<id>\d+)', array(
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => array( $this, 'get_job' ),
+            'permission_callback' => function() { return current_user_can( 'manage_options' ); },
+            'args'                => array( 'id' => array( 'type' => 'integer', 'required' => true ) ),
+        ) );
+
+        register_rest_route( 'cem/v1', '/jobs/(?P<id>\d+)/retry', array(
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => array( $this, 'retry_job' ),
+            'permission_callback' => function() { return current_user_can( 'manage_options' ); },
+            'args'                => array( 'id' => array( 'type' => 'integer', 'required' => true ) ),
+        ) );
+
         $custom_endpoints = get_option( 'cem_custom_endpoints', array() );
 
         if ( empty( $custom_endpoints ) || ! is_array( $custom_endpoints ) ) {
@@ -80,16 +100,81 @@ class Custom_Endpoints_Manager_REST_Controller {
             );
         }
 
+        $endpoint_slug          = sanitize_title( $target_endpoint['slug'] );
         $raw_code               = file_get_contents( $microplugin_cache_file );
         $callback_function_name = 'cem_microplugin_callback_' . $microplugin_post_id;
+
+        $payload = array(
+            'query' => $request->get_query_params(),
+            'body'  => $request->get_body_params(),
+            'json'  => json_decode( $request->get_body(), true ),
+        );
+
+        // ── Async mode ───────────────────────────────────────────────────────
+        if ( ! empty( $target_endpoint['async'] ) ) {
+            $max_attempts = max( 1, (int) ( $target_endpoint['max_attempts'] ?? CEM_Execution_Logger::MAX_ATTEMPTS ) );
+            $job_id       = CEM_Execution_Logger::queue_async(
+                $endpoint_slug,
+                $request->get_method(),
+                $payload,
+                $max_attempts
+            );
+            return new WP_REST_Response( array(
+                'job_id'   => $job_id,
+                'status'   => 'queued',
+                'endpoint' => $endpoint_slug,
+                'poll'     => rest_url( 'cem/v1/jobs/' . $job_id ),
+            ), 202 );
+        }
+
+        // ── Sync mode (with execution logging) ────────────────────────────────
+        $start = microtime( true );
 
         try {
             $executor      = new CEM_Code_Executor();
             $response_data = $executor->execute( $callback_function_name, $raw_code, $request );
+            $ms            = ( microtime( true ) - $start ) * 1000;
+
+            CEM_Execution_Logger::log_sync( $endpoint_slug, $request->get_method(), $payload, $response_data, $ms );
+
+            if ( $response_data instanceof WP_REST_Response ) {
+                return $response_data;
+            }
             return new WP_REST_Response( $response_data, 200 );
+
         } catch ( Exception $e ) {
-            return new WP_Error( 'endpoint_error', $e->getMessage(), array( 'status' => 500 ) );
+            $ms    = ( microtime( true ) - $start ) * 1000;
+            $error = new WP_Error( 'endpoint_error', $e->getMessage(), array( 'status' => 500 ) );
+            CEM_Execution_Logger::log_sync( $endpoint_slug, $request->get_method(), $payload, $error, $ms );
+            return $error;
         }
+    }
+
+    public function list_jobs( WP_REST_Request $request ): WP_REST_Response {
+        $logs = CEM_Execution_Logger::get_logs( array(
+            'per_page' => min( (int) ( $request->get_param( 'per_page' ) ?? 50 ), 100 ),
+            'offset'   => (int) ( $request->get_param( 'offset' ) ?? 0 ),
+            'status'   => sanitize_key( $request->get_param( 'status' ) ?? '' ),
+        ) );
+        return new WP_REST_Response( array( 'jobs' => $logs, 'total' => CEM_Execution_Logger::count_logs() ), 200 );
+    }
+
+    public function get_job( WP_REST_Request $request ): WP_REST_Response {
+        $job = CEM_Execution_Logger::get_job( (int) $request->get_param( 'id' ) );
+        if ( ! $job ) {
+            return new WP_REST_Response( new WP_Error( 'not_found', 'Job not found.', array( 'status' => 404 ) ), 404 );
+        }
+        return new WP_REST_Response( $job, 200 );
+    }
+
+    public function retry_job( WP_REST_Request $request ): WP_REST_Response {
+        $id  = (int) $request->get_param( 'id' );
+        $job = CEM_Execution_Logger::get_job( $id );
+        if ( ! $job ) {
+            return new WP_REST_Response( new WP_Error( 'not_found', 'Job not found.', array( 'status' => 404 ) ), 404 );
+        }
+        $ok = CEM_Execution_Logger::requeue( $id );
+        return new WP_REST_Response( array( 'requeued' => $ok, 'job_id' => $id ), $ok ? 200 : 409 );
     }
 
     public function get_function_library( WP_REST_Request $request ): WP_REST_Response {

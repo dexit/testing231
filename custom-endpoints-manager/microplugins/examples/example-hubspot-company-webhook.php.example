@@ -1,0 +1,107 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: HubSpot Company Revenue Updated Webhook
+ *
+ * Endpoint setup:
+ *   Slug:        webhook/hubspot/company
+ *   Methods:     POST
+ *   Capability:  read
+ *   Async:       No
+ *
+ * HubSpot subscription: company.propertyChange → annualrevenue, industry, name, numberofemployees
+ *
+ * WP options used:
+ *   cem_hubspot_api_key  — HubSpot Private App Token
+ *   cem_revenue_threshold — minimum revenue to trigger high-value alert (default 250000)
+ *
+ * What this does:
+ *  1. Stores company data in transient
+ *  2. Fetches full company record from HubSpot API
+ *  3. On revenue above threshold → creates/updates internal WP post (company profile)
+ *  4. Queues async SMS alert to sales director for high-value companies
+ *
+ * Replace 103 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_103( WP_REST_Request $request ) {
+    $events = CEM::body();
+    if ( empty( $events ) || ! is_array( $events ) ) {
+        return CEM::error( 'invalid_payload', 'Expected JSON array of events.', 400 );
+    }
+
+    $processed = array();
+    $api_token = CEM::option( 'cem_hubspot_api_key' );
+    $threshold = (int) CEM::option( 'cem_revenue_threshold', 250000 );
+
+    foreach ( $events as $event ) {
+        $company_id = (int) Lib::extract_field( $event, 'objectId', 0 );
+        $prop_name  = Lib::extract_field( $event, 'propertyName', '' );
+        $prop_value = Lib::extract_field( $event, 'propertyValue', '' );
+
+        if ( ! $company_id ) {
+            continue;
+        }
+
+        $key     = 'company_' . $company_id;
+        $company = CEM::retrieve( $key, array() );
+        $company['company_id'] = $company_id;
+        $company['updated_at'] = current_time( 'mysql' );
+        $company[ Lib::sanitize_slug( $prop_name ) ] = $prop_value;
+
+        // ── Fetch full company data ──────────────────────────────────────────
+        if ( $api_token ) {
+            $props = 'name,annualrevenue,industry,numberofemployees,city,country';
+            $resp  = CEM::http_get(
+                "https://api.hubapi.com/crm/v3/objects/companies/{$company_id}?properties={$props}",
+                array( 'headers' => array( 'Authorization' => "Bearer {$api_token}" ) )
+            );
+            if ( 200 === $resp['status'] ) {
+                $hs   = json_decode( $resp['body'], true );
+                $props_data = Lib::extract_field( $hs, 'properties', array() );
+                $company = array_merge( $company, Lib::flatten_array( $props_data ) );
+                CEM::store( $key, $company, 30 * DAY_IN_SECONDS );
+            }
+        }
+
+        CEM::store( $key, $company, 30 * DAY_IN_SECONDS );
+
+        // ── Update internal WP company profile post ──────────────────────────
+        if ( 'annualrevenue' === $prop_name ) {
+            $revenue = (int) Lib::extract_field( $company, 'annualrevenue', 0 );
+            $name    = Lib::extract_field( $company, 'name', "Company #{$company_id}" );
+
+            $existing = Lib::get_post_by_meta( 'cem_hs_company_id', (string) $company_id, 'cem_company' );
+            $post_args = array(
+                'post_type'   => 'cem_company',
+                'post_title'  => sanitize_text_field( $name ),
+                'post_status' => 'publish',
+                'meta_input'  => array(
+                    'cem_hs_company_id'  => $company_id,
+                    'cem_annual_revenue' => $revenue,
+                    'cem_industry'       => sanitize_text_field( $company['industry'] ?? '' ),
+                    'cem_employees'      => (int) ( $company['numberofemployees'] ?? 0 ),
+                ),
+            );
+
+            if ( $existing ) {
+                $post_args['ID'] = $existing->ID;
+                wp_update_post( $post_args );
+            } else {
+                Lib::create_post( $post_args );
+            }
+
+            // ── Alert sales director on high-value companies ─────────────────
+            if ( $revenue >= $threshold ) {
+                $revenue_fmt = '$' . number_format( $revenue );
+                CEM::queue( 'dispatch/sms', array(
+                    'to'      => CEM::option( 'cem_director_phone' ),
+                    'message' => "High-value company alert: {$name} updated revenue to {$revenue_fmt}. Check HubSpot.",
+                    'context' => array( 'type' => 'revenue_alert', 'company_id' => $company_id ),
+                ) );
+            }
+        }
+
+        $processed[] = array( 'company_id' => $company_id, 'property' => $prop_name, 'value' => $prop_value );
+    }
+
+    return CEM::response( array( 'received' => count( $processed ), 'events' => $processed ) );
+}

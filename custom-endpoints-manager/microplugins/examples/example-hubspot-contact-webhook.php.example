@@ -1,0 +1,90 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: HubSpot Contact Lifecycle Stage Changed Webhook
+ *
+ * Endpoint setup:
+ *   Slug:        webhook/hubspot/contact
+ *   Methods:     POST
+ *   Capability:  read
+ *   Async:       No
+ *
+ * HubSpot subscription: contact.propertyChange → lifecyclestage, email, firstname, phone
+ *
+ * WP options used:
+ *   cem_hubspot_secret    — HubSpot client secret
+ *   cem_hubspot_api_key   — HubSpot Private App Token (for fetching full contact)
+ *
+ * What this does:
+ *  1. Stores contact property changes in a transient
+ *  2. On 'customer' lifecycle stage → queues async welcome SMS job
+ *  3. On 'lead' → queues async internal CRM post creation
+ *
+ * Replace 102 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_102( WP_REST_Request $request ) {
+    $events = CEM::body();
+    if ( empty( $events ) || ! is_array( $events ) ) {
+        return CEM::error( 'invalid_payload', 'Expected JSON array of events.', 400 );
+    }
+
+    $processed = array();
+
+    foreach ( $events as $event ) {
+        $contact_id = (int) Lib::extract_field( $event, 'objectId', 0 );
+        $prop_name  = Lib::extract_field( $event, 'propertyName', '' );
+        $prop_value = Lib::extract_field( $event, 'propertyValue', '' );
+
+        if ( ! $contact_id ) {
+            continue;
+        }
+
+        $key     = 'contact_' . $contact_id;
+        $contact = CEM::retrieve( $key, array() );
+
+        $contact['contact_id'] = $contact_id;
+        $contact['portal_id']  = Lib::extract_field( $event, 'portalId', 0 );
+        $contact['updated_at'] = current_time( 'mysql' );
+        $contact[ Lib::sanitize_slug( $prop_name ) ] = $prop_value;
+
+        CEM::store( $key, $contact, 14 * DAY_IN_SECONDS );
+
+        // ── Fetch extra contact props from HubSpot API ───────────────────────
+        $api_token = CEM::option( 'cem_hubspot_api_key' );
+        if ( $api_token && 'lifecyclestage' === $prop_name ) {
+            $resp = CEM::http_get(
+                "https://api.hubapi.com/crm/v3/objects/contacts/{$contact_id}?properties=email,firstname,lastname,phone",
+                array( 'headers' => array( 'Authorization' => "Bearer {$api_token}" ) )
+            );
+            if ( 200 === $resp['status'] ) {
+                $hs_data = json_decode( $resp['body'], true );
+                $contact = array_merge( $contact, Lib::extract_field( $hs_data, 'properties', array() ) );
+                CEM::store( $key, $contact, 14 * DAY_IN_SECONDS );
+            }
+        }
+
+        // ── Lifecycle-specific downstream jobs ───────────────────────────────
+        if ( 'lifecyclestage' === $prop_name ) {
+            if ( 'customer' === $prop_value && ! empty( $contact['phone'] ) ) {
+                CEM::queue( 'dispatch/sms', array(
+                    'to'      => $contact['phone'],
+                    'message' => "Welcome to the family, {$contact['firstname']}! 🎉 Your account is now active.",
+                    'context' => array( 'type' => 'welcome', 'contact_id' => $contact_id ),
+                ) );
+            }
+
+            if ( 'lead' === $prop_value ) {
+                // Create internal WP CRM record for new leads
+                CEM::queue( 'internal/crm-create-contact', array(
+                    'contact_id' => $contact_id,
+                    'email'      => $contact['email'] ?? '',
+                    'firstname'  => $contact['firstname'] ?? '',
+                    'lifecycle'  => $prop_value,
+                ) );
+            }
+        }
+
+        $processed[] = array( 'contact_id' => $contact_id, 'property' => $prop_name, 'value' => $prop_value );
+    }
+
+    return CEM::response( array( 'received' => count( $processed ), 'events' => $processed ) );
+}

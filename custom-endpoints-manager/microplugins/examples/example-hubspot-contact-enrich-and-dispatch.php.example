@@ -1,0 +1,158 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: HubSpot Contact Property Change → Reverse Lookup → Enrich → Dispatch
+ *
+ * Receives a contact.propertyChange webhook event, does a full reverse lookup
+ * on the HubSpot contact to assemble a rich dataset, then dispatches to an
+ * external CRM or integration API.
+ *
+ * Endpoint setup:
+ *   Slug:        webhook/hubspot/contact-enrich
+ *   Methods:     POST
+ *   Capability:  read
+ *   Async:       No     (acknowledge quickly; downstream dispatch is queued async)
+ *
+ * WP options used:
+ *   cem_hubspot_api_key          — HubSpot Private App Token
+ *   cem_dispatch_crm_endpoint    — Target API URL to receive enriched contact
+ *   cem_dispatch_crm_api_key     — Auth key for target API
+ *
+ * Pipeline:
+ *  1. Receive HubSpot webhook (array of property-change events)
+ *  2. For each event: reverse-lookup the full contact via HubSpot CRM API v3
+ *  3. Resolve associated company (if any) via HubSpot associations API
+ *  4. Assemble enriched dataset: contact props + company props + event metadata
+ *  5. Queue async dispatch job to push dataset to target API
+ *
+ * Selected contact properties fetched:
+ *   email, firstname, lastname, phone, mobilephone, jobtitle, lifecyclestage,
+ *   hs_lead_status, createdate, lastmodifieddate, hubspot_owner_id,
+ *   hs_email_optout, city, state, country, zip
+ *
+ * Replace 107 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_107( WP_REST_Request $request ) {
+    $api_token = CEM::option( 'cem_hubspot_api_key' );
+    if ( ! $api_token ) {
+        return CEM::error( 'missing_config', 'cem_hubspot_api_key option not set.', 500 );
+    }
+
+    $events = CEM::body();
+    if ( empty( $events ) || ! is_array( $events ) ) {
+        return CEM::error( 'invalid_payload', 'Expected JSON array of HubSpot webhook events.', 400 );
+    }
+
+    $results = array();
+
+    foreach ( $events as $event ) {
+        $contact_id = (int) Lib::extract_field( $event, 'objectId', 0 );
+        $prop_name  = Lib::extract_field( $event, 'propertyName', '' );
+        $prop_value = Lib::extract_field( $event, 'propertyValue', '' );
+        $portal_id  = Lib::extract_field( $event, 'portalId', 0 );
+
+        if ( ! $contact_id ) {
+            continue;
+        }
+
+        // ── Step 1: Reverse lookup — fetch all selected contact properties ────
+        $contact_props = implode( ',', array(
+            'email', 'firstname', 'lastname', 'phone', 'mobilephone',
+            'jobtitle', 'lifecyclestage', 'hs_lead_status',
+            'createdate', 'lastmodifieddate', 'hubspot_owner_id',
+            'hs_email_optout', 'city', 'state', 'country', 'zip',
+        ) );
+
+        $contact_resp = CEM::http_get(
+            "https://api.hubapi.com/crm/v3/objects/contacts/{$contact_id}?properties={$contact_props}&associations=companies",
+            array( 'headers' => array( 'Authorization' => "Bearer {$api_token}" ) )
+        );
+
+        if ( 200 !== $contact_resp['status'] ) {
+            $results[] = array( 'contact_id' => $contact_id, 'error' => 'Contact lookup failed: ' . $contact_resp['status'] );
+            continue;
+        }
+
+        $contact_data = json_decode( $contact_resp['body'], true );
+        $props        = Lib::extract_field( $contact_data, 'properties', array() );
+
+        // ── Step 2: Resolve associated company ───────────────────────────────
+        $company_data = array();
+        $company_ids  = Lib::extract_field( $contact_data, 'associations.companies.results', array() );
+
+        if ( ! empty( $company_ids ) ) {
+            $first_company_id = (int) Lib::extract_field( $company_ids[0], 'id', 0 );
+            if ( $first_company_id ) {
+                $co_props  = 'name,domain,industry,annualrevenue,numberofemployees,city,country';
+                $co_resp   = CEM::http_get(
+                    "https://api.hubapi.com/crm/v3/objects/companies/{$first_company_id}?properties={$co_props}",
+                    array( 'headers' => array( 'Authorization' => "Bearer {$api_token}" ) )
+                );
+                if ( 200 === $co_resp['status'] ) {
+                    $company_data = Lib::extract_field( json_decode( $co_resp['body'], true ), 'properties', array() );
+                }
+            }
+        }
+
+        // ── Step 3: Assemble enriched dataset ────────────────────────────────
+        $enriched = array(
+            'source'          => 'hubspot',
+            'portal_id'       => $portal_id,
+            'contact_id'      => $contact_id,
+            'trigger_property'=> $prop_name,
+            'trigger_value'   => $prop_value,
+            'occurred_at'     => gmdate( 'c', (int) ( Lib::extract_field( $event, 'occurredAt', 0 ) / 1000 ) ),
+
+            // Contact fields
+            'email'           => sanitize_email( $props['email'] ?? '' ),
+            'firstname'       => sanitize_text_field( $props['firstname'] ?? '' ),
+            'lastname'        => sanitize_text_field( $props['lastname'] ?? '' ),
+            'phone'           => sanitize_text_field( $props['phone'] ?? '' ),
+            'mobile'          => sanitize_text_field( $props['mobilephone'] ?? '' ),
+            'jobtitle'        => sanitize_text_field( $props['jobtitle'] ?? '' ),
+            'lifecycle'       => sanitize_text_field( $props['lifecyclestage'] ?? '' ),
+            'lead_status'     => sanitize_text_field( $props['hs_lead_status'] ?? '' ),
+            'email_optout'    => Lib::parse_bool( $props['hs_email_optout'] ?? false ),
+            'location'        => implode( ', ', array_filter( array(
+                sanitize_text_field( $props['city']    ?? '' ),
+                sanitize_text_field( $props['state']   ?? '' ),
+                sanitize_text_field( $props['country'] ?? '' ),
+            ) ) ),
+            'created_at'      => $props['createdate']      ?? '',
+            'modified_at'     => $props['lastmodifieddate'] ?? '',
+
+            // Company fields (empty string if no association)
+            'company_name'    => sanitize_text_field( $company_data['name']            ?? '' ),
+            'company_domain'  => sanitize_text_field( $company_data['domain']          ?? '' ),
+            'company_industry'=> sanitize_text_field( $company_data['industry']        ?? '' ),
+            'company_revenue' => (int) ( $company_data['annualrevenue']                ?? 0 ),
+            'company_size'    => (int) ( $company_data['numberofemployees']            ?? 0 ),
+        );
+
+        // ── Store enriched contact locally ────────────────────────────────────
+        CEM::store( 'enriched_contact_' . $contact_id, $enriched, 7 * DAY_IN_SECONDS );
+
+        // ── Step 4: Queue async dispatch to target API ────────────────────────
+        $dispatch_url = CEM::option( 'cem_dispatch_crm_endpoint' );
+        if ( $dispatch_url ) {
+            CEM::queue( 'dispatch/crm-contact', array(
+                'payload'      => $enriched,
+                'endpoint_url' => $dispatch_url,
+                'api_key'      => CEM::option( 'cem_dispatch_crm_api_key' ),
+            ) );
+        }
+
+        $results[] = array(
+            'contact_id' => $contact_id,
+            'email'      => $enriched['email'],
+            'lifecycle'  => $enriched['lifecycle'],
+            'company'    => $enriched['company_name'],
+            'queued'     => (bool) $dispatch_url,
+        );
+    }
+
+    return CEM::response( array(
+        'received' => count( $events ),
+        'processed' => count( $results ),
+        'results'  => $results,
+    ) );
+}

@@ -188,6 +188,67 @@ class CEM {
     public static function error( string $code, string $message, int $status = 400 ): \WP_Error {
         return new \WP_Error( $code, $message, array( 'status' => $status ) );
     }
+
+    /**
+     * HTTP GET via WP HTTP API. Returns ['status', 'body', 'headers'] or ['error'].
+     */
+    public static function http_get( string $url, array $args = array() ): array {
+        $response = wp_remote_get( $url, $args );
+        if ( is_wp_error( $response ) ) {
+            return array( 'error' => $response->get_error_message(), 'status' => 0, 'body' => '', 'headers' => array() );
+        }
+        return array(
+            'status'  => wp_remote_retrieve_response_code( $response ),
+            'body'    => wp_remote_retrieve_body( $response ),
+            'headers' => wp_remote_retrieve_headers( $response )->getAll(),
+        );
+    }
+
+    /**
+     * HTTP POST via WP HTTP API. $body can be array (form) or string (JSON).
+     * Returns ['status', 'body', 'headers'] or ['error'].
+     */
+    public static function http_post( string $url, $body, array $args = array() ): array {
+        $defaults = array( 'body' => is_array( $body ) ? $body : (string) $body );
+        $response = wp_remote_post( $url, wp_parse_args( $args, $defaults ) );
+        if ( is_wp_error( $response ) ) {
+            return array( 'error' => $response->get_error_message(), 'status' => 0, 'body' => '', 'headers' => array() );
+        }
+        return array(
+            'status'  => wp_remote_retrieve_response_code( $response ),
+            'body'    => wp_remote_retrieve_body( $response ),
+            'headers' => wp_remote_retrieve_headers( $response )->getAll(),
+        );
+    }
+
+    /**
+     * Store a value to WP transients (shareable across microplugins).
+     *
+     * @param int $expiry Seconds (0 = no expiry)
+     */
+    public static function store( string $key, $value, int $expiry = 0 ): bool {
+        return set_transient( 'cem_store_' . sanitize_key( $key ), $value, $expiry );
+    }
+
+    /**
+     * Retrieve a previously stored value.
+     */
+    public static function retrieve( string $key, $default = null ) {
+        $val = get_transient( 'cem_store_' . sanitize_key( $key ) );
+        return ( false !== $val ) ? $val : $default;
+    }
+
+    /**
+     * Queue an async job for another endpoint slug.
+     *
+     * @param  string $endpoint_slug  e.g. 'dispatch/sms'
+     * @param  array  $payload        Data passed to the target microplugin as request params
+     * @param  string $method         HTTP method (default POST)
+     * @return int    Job ID
+     */
+    public static function queue( string $endpoint_slug, array $payload = array(), string $method = 'POST' ): int {
+        return \CEM_Execution_Logger::queue_async( sanitize_title( $endpoint_slug ), $method, array( 'body' => $payload ) );
+    }
 }
 
 PREAMBLE;

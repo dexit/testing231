@@ -32,6 +32,16 @@ $microplugins_posts = get_posts( array(
         <a href="edit.php?post_type=<?php echo esc_attr( Microplugins::POST_TYPE ); ?>" class="nav-tab">
             <?php esc_html_e( 'Microplugins', 'custom-endpoints-manager' ); ?>
         </a>
+        <a href="?page=custom-endpoints-manager&tab=logs"
+           class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>">
+            <?php
+            $total_logs = CEM_Execution_Logger::count_logs();
+            esc_html_e( 'Execution Logs', 'custom-endpoints-manager' );
+            if ( $total_logs ) {
+                echo ' <span class="update-plugins count-' . esc_attr( $total_logs ) . '"><span class="plugin-count">' . esc_html( $total_logs ) . '</span></span>';
+            }
+            ?>
+        </a>
     </nav>
 
     <?php if ( isset( $_GET['message'] ) && $active_tab === 'endpoints' ) : ?>
@@ -63,6 +73,7 @@ $microplugins_posts = get_posts( array(
                         <th><?php esc_html_e( 'Capability', 'custom-endpoints-manager' ); ?></th>
                         <th><?php esc_html_e( 'Microplugin (Callback)', 'custom-endpoints-manager' ); ?></th>
                         <th><?php esc_html_e( 'Arguments (name:type,...)', 'custom-endpoints-manager' ); ?></th>
+                        <th><?php esc_html_e( 'Async', 'custom-endpoints-manager' ); ?></th>
                         <th><?php esc_html_e( 'Action', 'custom-endpoints-manager' ); ?></th>
                     </tr>
                 </thead>
@@ -107,6 +118,21 @@ $microplugins_posts = get_posts( array(
                             <input type="text" name="cem_endpoints[<?php echo $index; ?>][args]"
                                 value="<?php echo esc_attr( isset( $endpoint['args'] ) ? $endpoint['args'] : '' ); ?>"
                                 class="regular-text" placeholder="id:integer,s:string" />
+                        </td>
+                        <td style="white-space:nowrap">
+                            <label>
+                                <input type="checkbox"
+                                    name="cem_endpoints[<?php echo $index; ?>][async]"
+                                    value="1"
+                                    <?php checked( ! empty( $endpoint['async'] ) ); ?> />
+                                <?php esc_html_e( 'Async', 'custom-endpoints-manager' ); ?>
+                            </label><br>
+                            <label style="font-size:11px">
+                                <?php esc_html_e( 'Attempts:', 'custom-endpoints-manager' ); ?>
+                                <input type="number" name="cem_endpoints[<?php echo $index; ?>][max_attempts]"
+                                    value="<?php echo esc_attr( $endpoint['max_attempts'] ?? 3 ); ?>"
+                                    min="1" max="10" style="width:45px" />
+                            </label>
                         </td>
                         <td>
                             <button type="button" class="button button-secondary remove-endpoint">

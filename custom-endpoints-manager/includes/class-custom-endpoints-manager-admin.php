@@ -65,7 +65,12 @@ class Custom_Endpoints_Manager_Admin {
     }
 
     public function display_options_page() {
-        include_once CEM_PLUGIN_DIR . 'admin/partials/custom-endpoints-manager-admin-display.php';
+        $tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'endpoints';
+        if ( 'logs' === $tab ) {
+            include_once CEM_PLUGIN_DIR . 'admin/partials/cem-execution-logs-display.php';
+        } else {
+            include_once CEM_PLUGIN_DIR . 'admin/partials/custom-endpoints-manager-admin-display.php';
+        }
     }
 
     public function save_custom_endpoints() {
@@ -90,6 +95,8 @@ class Custom_Endpoints_Manager_Admin {
                     'capability'     => sanitize_text_field( $endpoint['capability'] ),
                     'microplugin_id' => isset( $endpoint['microplugin_id'] ) ? intval( $endpoint['microplugin_id'] ) : 0,
                     'args'           => isset( $endpoint['args'] ) ? sanitize_text_field( $endpoint['args'] ) : '',
+                    'async'          => ! empty( $endpoint['async'] ),
+                    'max_attempts'   => isset( $endpoint['max_attempts'] ) ? max( 1, min( 10, intval( $endpoint['max_attempts'] ) ) ) : 3,
                 );
                 if ( ! empty( $sanitized['slug'] ) ) {
                     $endpoints[] = $sanitized;
