@@ -15,7 +15,15 @@ class Custom_Endpoints_Manager_Admin {
         $this->version     = $version;
     }
 
+    private function is_plugin_page(): bool {
+        $screen = get_current_screen();
+        return $screen && $screen->id === 'settings_page_custom-endpoints-manager';
+    }
+
     public function enqueue_styles() {
+        if ( ! $this->is_plugin_page() ) {
+            return;
+        }
         wp_enqueue_style(
             $this->plugin_name,
             CEM_PLUGIN_URL . 'admin/css/custom-endpoints-manager-admin.css',
@@ -26,6 +34,9 @@ class Custom_Endpoints_Manager_Admin {
     }
 
     public function enqueue_scripts() {
+        if ( ! $this->is_plugin_page() ) {
+            return;
+        }
         wp_enqueue_script(
             $this->plugin_name,
             CEM_PLUGIN_URL . 'admin/js/custom-endpoints-manager-admin.js',

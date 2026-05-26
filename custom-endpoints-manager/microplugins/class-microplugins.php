@@ -291,7 +291,12 @@ class Microplugins {
         <?php
     }
 
+    private static $save_in_progress = false;
+
     public static function save_post_action( $post_id ) {
+        if ( self::$save_in_progress ) {
+            return;
+        }
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
             return;
         }
@@ -313,7 +318,10 @@ class Microplugins {
             $validation    = $validator->validate( $post->post_content, $function_name );
 
             if ( ! $validation['valid'] ) {
+                self::$save_in_progress = true;
                 wp_update_post( array( 'ID' => $post_id, 'post_status' => 'pending' ) );
+                self::$save_in_progress = false;
+
                 $error = array(
                     'type'    => E_USER_ERROR,
                     'message' => $validation['error'],
