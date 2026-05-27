@@ -315,6 +315,7 @@
 		initArgBuilder( card );
 		initSchemaMapper( card );
 		initCallbackTabs( card );
+		initCardAI( card );
 	}
 
 	// ── Section collapse / expand ────────────────────────────────────
@@ -713,6 +714,171 @@
 			.replace( /</g, '&lt;' )
 			.replace( />/g, '&gt;' )
 			.replace( /"/g, '&quot;' );
+	}
+
+	// ── AI integration ────────────────────────────────────────────────
+	var cemAIAvailable = false;
+
+	function initAI() {
+		if ( 'undefined' === typeof cemAI || ! cemAI.statusUrl ) {
+			return;
+		}
+		fetch( cemAI.statusUrl, { headers: { 'X-WP-Nonce': cemAI.nonce } } )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( data ) {
+				if ( data.available ) {
+					cemAIAvailable = true;
+					showAIButtons();
+				}
+			} )
+			.catch( function () {} );
+	}
+
+	function showAIButtons() {
+		var cards    = stack ? stack.querySelectorAll( '.cem-endpoint-card' ) : [];
+		var cardsLen = cards.length;
+		var cIdx;
+		for ( cIdx = 0; cIdx < cardsLen; cIdx++ ) {
+			initCardAI( cards[ cIdx ] );
+		}
+	}
+
+	function initCardAI( card ) {
+		if ( ! cemAIAvailable ) {
+			return;
+		}
+		var argsBtn   = card.querySelector( '.cem-ai-suggest-args' );
+		var schemaBtn = card.querySelector( '.cem-ai-suggest-schema' );
+
+		if ( argsBtn ) {
+			argsBtn.style.display = '';
+			argsBtn.addEventListener( 'click', function () {
+				handleAISuggestArgs( card, argsBtn );
+			} );
+		}
+		if ( schemaBtn ) {
+			schemaBtn.style.display = '';
+			schemaBtn.addEventListener( 'click', function () {
+				handleAISuggestSchema( card, schemaBtn );
+			} );
+		}
+	}
+
+	function getCardDescription( card ) {
+		var slugEl = card.querySelector( '.cem-slug-input' );
+		return slugEl ? slugEl.value.trim().replace( /-/g, ' ' ) : '';
+	}
+
+	function getCardMicropluginId( card ) {
+		var mpSel = card.querySelector( '.cem-microplugin-select' );
+		return mpSel ? parseInt( mpSel.value, 10 ) || 0 : 0;
+	}
+
+	function handleAISuggestArgs( card, btn ) {
+		var slug  = card.querySelector( '.cem-slug-input' ) ? card.querySelector( '.cem-slug-input' ).value.trim() : '';
+		var mpId  = getCardMicropluginId( card );
+		var tbody = card.querySelector( '.cem-arg-tbody' );
+		var argsHid = card.querySelector( '.cem-args-val' );
+
+		if ( ! slug ) {
+			// eslint-disable-next-line no-alert
+			alert( 'Please enter an endpoint slug first so AI has context.' );
+			return;
+		}
+
+		var origText    = btn.textContent;
+		btn.disabled    = true;
+		btn.textContent = 'Thinking…';
+
+		var payload = { description: slug.replace( /-/g, ' ' ), endpoint_slug: slug };
+		if ( mpId > 0 ) {
+			payload.microplugin_id = mpId;
+		}
+
+		fetch( cemAI.suggestArgs, {
+			method:  'POST',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cemAI.nonce },
+			body:    JSON.stringify( payload )
+		} )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( data ) {
+				btn.disabled    = false;
+				btn.textContent = origText;
+				if ( ! data.args || ! Array.isArray( data.args ) ) {
+					return;
+				}
+				var aiArgs    = data.args;
+				var aiArgsLen = aiArgs.length;
+				var aIdx;
+				for ( aIdx = 0; aIdx < aiArgsLen; aIdx++ ) {
+					var arg = aiArgs[ aIdx ];
+					if ( arg.name ) {
+						addArgRow( tbody, arg.name, arg.type || 'string', false, argsHid );
+					}
+				}
+				syncArgsText( tbody, argsHid );
+			} )
+			.catch( function () {
+				btn.disabled    = false;
+				btn.textContent = origText;
+			} );
+	}
+
+	function handleAISuggestSchema( card, btn ) {
+		var slug = card.querySelector( '.cem-slug-input' ) ? card.querySelector( '.cem-slug-input' ).value.trim() : '';
+		if ( ! slug ) {
+			// eslint-disable-next-line no-alert
+			alert( 'Please enter an endpoint slug first so AI has context.' );
+			return;
+		}
+
+		var origText    = btn.textContent;
+		btn.disabled    = true;
+		btn.textContent = 'Thinking…';
+
+		var payload = { description: slug.replace( /-/g, ' ' ) };
+
+		fetch( cemAI.suggestSchema, {
+			method:  'POST',
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cemAI.nonce },
+			body:    JSON.stringify( payload )
+		} )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( data ) {
+				btn.disabled    = false;
+				btn.textContent = origText;
+				if ( ! data.schema ) {
+					return;
+				}
+				var s = data.schema;
+				var rootInput       = card.querySelector( '[name$="[response_map][root]"]' );
+				var itemsInput      = card.querySelector( '[name$="[response_map][items]"]' );
+				var totalCountInput = card.querySelector( '[name$="[response_map][total_count]"]' );
+				var pageInput       = card.querySelector( '[name$="[response_map][page]"]' );
+				var totalPagesInput = card.querySelector( '[name$="[response_map][total_pages]"]' );
+				if ( rootInput && s.root !== undefined )        { rootInput.value       = s.root; }
+				if ( itemsInput && s.items !== undefined )       { itemsInput.value      = s.items; }
+				if ( totalCountInput && s.total_count !== undefined ) { totalCountInput.value = s.total_count; }
+				if ( pageInput && s.page !== undefined )         { pageInput.value       = s.page; }
+				if ( totalPagesInput && s.total_pages !== undefined ) { totalPagesInput.value = s.total_pages; }
+
+				// Expand the schema section if it was collapsed.
+				var schemaSection = btn.closest( '.cem-card-section' );
+				if ( schemaSection ) {
+					schemaSection.classList.remove( 'cem-section-collapsed' );
+				}
+			} )
+			.catch( function () {
+				btn.disabled    = false;
+				btn.textContent = origText;
+			} );
+	}
+
+	// Kick off AI status check after DOM ready.
+	if ( document.readyState === 'loading' ) {
+		document.addEventListener( 'DOMContentLoaded', initAI );
+	} else {
+		initAI();
 	}
 
 } )();

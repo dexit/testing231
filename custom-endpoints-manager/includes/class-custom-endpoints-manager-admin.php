@@ -100,6 +100,16 @@ class Custom_Endpoints_Manager_Admin {
 				'remove'            => __( 'Remove', 'custom-endpoints-manager' ),
 			)
 		);
+		wp_localize_script(
+			$this->plugin_name,
+			'cemAI',
+			array(
+				'statusUrl'     => rest_url( 'cem/v1/ai/status' ),
+				'suggestArgs'   => rest_url( 'cem/v1/ai/suggest-args' ),
+				'suggestSchema' => rest_url( 'cem/v1/ai/suggest-schema' ),
+				'nonce'         => wp_create_nonce( 'wp_rest' ),
+			)
+		);
 	}
 
 	/**

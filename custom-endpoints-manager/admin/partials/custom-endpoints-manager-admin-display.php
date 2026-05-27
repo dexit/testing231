@@ -370,6 +370,9 @@ if ( isset( $_GET['message'] ) ) :
 						</table>
 						<div class="cem-arg-actions">
 							<button type="button" class="button cem-add-arg"><?php esc_html_e( '+ Add Argument', 'custom-endpoints-manager' ); ?></button>
+							<button type="button" class="button cem-ai-suggest-args" style="display:none" data-index="<?php echo esc_attr( $i ); ?>">
+								&#10024; <?php esc_html_e( 'AI Suggest', 'custom-endpoints-manager' ); ?>
+							</button>
 						</div>
 						<input type="hidden"
 							name="cem_endpoints[<?php echo esc_attr( $i ); ?>][args]"
@@ -391,9 +394,14 @@ if ( isset( $_GET['message'] ) ) :
 								<?php esc_html_e( 'Paste a sample JSON response to auto-detect key paths:', 'custom-endpoints-manager' ); ?>
 							</label>
 							<textarea class="cem-schema-json" rows="4" placeholder='{ "data": { "items": [...], "total": 100, "page": 1, "pages": 5 } }'></textarea>
-							<button type="button" class="button cem-schema-extract">
-								<?php esc_html_e( 'Extract Keys', 'custom-endpoints-manager' ); ?>
-							</button>
+							<div style="display:flex;gap:6px;flex-wrap:wrap">
+								<button type="button" class="button cem-schema-extract">
+									<?php esc_html_e( 'Extract Keys', 'custom-endpoints-manager' ); ?>
+								</button>
+								<button type="button" class="button cem-ai-suggest-schema" style="display:none" data-index="<?php echo esc_attr( $i ); ?>">
+									&#10024; <?php esc_html_e( 'AI Schema', 'custom-endpoints-manager' ); ?>
+								</button>
+							</div>
 						</div>
 						<datalist id="cem-schema-paths-<?php echo esc_attr( $i ); ?>"></datalist>
 						<div class="cem-schema-fields">

@@ -349,6 +349,16 @@ class Microplugins {
 			'low',
 			array()
 		);
+
+		add_meta_box(
+			'microplugin-ai-assistant',
+			__( 'AI Code Assistant', 'custom-endpoints-manager' ),
+			array( __CLASS__, 'render_ai_assistant_metabox' ),
+			self::POST_TYPE,
+			'normal',
+			'default',
+			array()
+		);
 	}
 
 	/**
@@ -579,6 +589,221 @@ class Microplugins {
 				</li>
 			<?php endforeach; ?>
 		</ul>
+		<?php
+	}
+
+	/**
+	 * Render the AI Code Assistant meta box.
+	 *
+	 * @since 1.1.0
+	 */
+	public static function render_ai_assistant_metabox() {
+		global $post;
+		$mp_id       = $post instanceof WP_Post ? $post->ID : 0;
+		$status_url  = esc_url( rest_url( 'cem/v1/ai/status' ) );
+		$gen_url     = esc_url( rest_url( 'cem/v1/ai/generate-code' ) );
+		$improve_url = esc_url( rest_url( 'cem/v1/ai/improve-code' ) );
+		$nonce       = wp_create_nonce( 'wp_rest' );
+		?>
+		<div id="cem-ai-assistant"
+			data-status-url="<?php echo $status_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>"
+			data-gen-url="<?php echo $gen_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>"
+			data-improve-url="<?php echo $improve_url; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>"
+			data-mp-id="<?php echo esc_attr( $mp_id ); ?>"
+			data-nonce="<?php echo esc_attr( $nonce ); ?>">
+
+			<div id="cem-ai-unavailable" style="display:none;padding:8px;background:#fff3cd;border-left:3px solid #ffc107;font-size:12px;margin-bottom:10px">
+				<strong><?php esc_html_e( 'AI not available', 'custom-endpoints-manager' ); ?></strong>
+				<span id="cem-ai-unavailable-reason"></span>
+			</div>
+
+			<div id="cem-ai-controls">
+				<p style="font-size:12px;color:#646970;margin-top:0">
+					<?php esc_html_e( 'Use the WordPress AI Client to generate or improve microplugin code.', 'custom-endpoints-manager' ); ?>
+				</p>
+
+				<div style="margin-bottom:12px">
+					<label for="cem-ai-description" style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">
+						<?php esc_html_e( 'Describe what this endpoint should do:', 'custom-endpoints-manager' ); ?>
+					</label>
+					<textarea
+						id="cem-ai-description"
+						rows="3"
+						style="width:100%;font-size:12px;resize:vertical"
+						placeholder="<?php esc_attr_e( 'e.g. Return a paginated list of published posts filtered by category…', 'custom-endpoints-manager' ); ?>"></textarea>
+				</div>
+
+				<div style="display:flex;gap:8px;flex-wrap:wrap">
+					<button type="button" id="cem-ai-generate-btn" class="button button-primary" disabled>
+						<span class="dashicons dashicons-editor-code" style="vertical-align:middle;font-size:14px;height:14px;width:14px;margin-right:4px"></span>
+						<?php esc_html_e( 'Generate Code', 'custom-endpoints-manager' ); ?>
+					</button>
+					<button type="button" id="cem-ai-improve-btn" class="button" disabled>
+						<span class="dashicons dashicons-superhero" style="vertical-align:middle;font-size:14px;height:14px;width:14px;margin-right:4px"></span>
+						<?php esc_html_e( 'Improve Current Code', 'custom-endpoints-manager' ); ?>
+					</button>
+				</div>
+
+				<div id="cem-ai-spinner" style="display:none;margin-top:10px;font-size:12px;color:#646970">
+					<span class="spinner is-active" style="float:none;vertical-align:middle;margin:0 4px 0 0"></span>
+					<span id="cem-ai-spinner-text"><?php esc_html_e( 'Generating…', 'custom-endpoints-manager' ); ?></span>
+				</div>
+
+				<div id="cem-ai-result" style="display:none;margin-top:12px">
+					<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+						<strong style="font-size:12px"><?php esc_html_e( 'Generated Code:', 'custom-endpoints-manager' ); ?></strong>
+						<div style="display:flex;gap:6px">
+							<button type="button" id="cem-ai-apply-btn" class="button button-primary" style="font-size:11px;height:24px;line-height:22px;padding:0 8px">
+								<?php esc_html_e( 'Apply to Editor', 'custom-endpoints-manager' ); ?>
+							</button>
+							<button type="button" id="cem-ai-discard-btn" class="button" style="font-size:11px;height:24px;line-height:22px;padding:0 8px">
+								<?php esc_html_e( 'Discard', 'custom-endpoints-manager' ); ?>
+							</button>
+						</div>
+					</div>
+					<pre id="cem-ai-code-preview" style="background:#1d2025;color:#abb2bf;font-size:11px;padding:10px;overflow:auto;max-height:300px;border-radius:3px;white-space:pre-wrap;word-break:break-word;margin:0"></pre>
+				</div>
+
+				<div id="cem-ai-error" style="display:none;margin-top:10px;padding:8px;background:#fce8e8;border-left:3px solid #d63638;font-size:12px;color:#d63638"></div>
+			</div>
+		</div>
+		<script>
+		(function() {
+			var ai = null;
+			var pendingCode = '';
+
+			function init() {
+				ai = document.getElementById('cem-ai-assistant');
+				if (!ai) return;
+
+				checkStatus();
+
+				document.getElementById('cem-ai-generate-btn').addEventListener('click', handleGenerate);
+				document.getElementById('cem-ai-improve-btn').addEventListener('click', handleImprove);
+				document.getElementById('cem-ai-apply-btn').addEventListener('click', applyCode);
+				document.getElementById('cem-ai-discard-btn').addEventListener('click', discardCode);
+			}
+
+			function checkStatus() {
+				fetch(ai.dataset.statusUrl, {
+					headers: { 'X-WP-Nonce': ai.dataset.nonce }
+				})
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					if (data.available) {
+						document.getElementById('cem-ai-generate-btn').disabled = false;
+						document.getElementById('cem-ai-improve-btn').disabled = false;
+					} else {
+						document.getElementById('cem-ai-unavailable').style.display = 'block';
+						document.getElementById('cem-ai-unavailable-reason').textContent = data.reason ? ' — ' + data.reason : '';
+					}
+				})
+				.catch(function() {
+					document.getElementById('cem-ai-unavailable').style.display = 'block';
+					document.getElementById('cem-ai-unavailable-reason').textContent = ' — Could not reach REST API.';
+				});
+			}
+
+			function handleGenerate() {
+				var desc = document.getElementById('cem-ai-description').value.trim();
+				if (!desc) {
+					alert('Please describe what the endpoint should do.');
+					return;
+				}
+				showSpinner('<?php echo esc_js( __( 'Generating code…', 'custom-endpoints-manager' ) ); ?>');
+				fetch(ai.dataset.genUrl, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': ai.dataset.nonce },
+					body: JSON.stringify({ description: desc, microplugin_id: parseInt(ai.dataset.mpId, 10) || 0 })
+				})
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					hideSpinner();
+					if (data.code) {
+						showResult(data.code);
+					} else {
+						showError(data.message || 'Unexpected error.');
+					}
+				})
+				.catch(function(e) { hideSpinner(); showError(e.message); });
+			}
+
+			function handleImprove() {
+				var editor = window.ace ? window.ace.edit('micropluginEditor') : null;
+				var code = editor ? editor.getValue() : (document.getElementById('postContent') ? document.getElementById('postContent').value : '');
+				if (!code.trim()) {
+					alert('The editor is empty — nothing to improve.');
+					return;
+				}
+				showSpinner('<?php echo esc_js( __( 'Improving code…', 'custom-endpoints-manager' ) ); ?>');
+				fetch(ai.dataset.improveUrl, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': ai.dataset.nonce },
+					body: JSON.stringify({ code: code, microplugin_id: parseInt(ai.dataset.mpId, 10) || 0 })
+				})
+				.then(function(r) { return r.json(); })
+				.then(function(data) {
+					hideSpinner();
+					if (data.code) {
+						showResult(data.code);
+					} else {
+						showError(data.message || 'Unexpected error.');
+					}
+				})
+				.catch(function(e) { hideSpinner(); showError(e.message); });
+			}
+
+			function applyCode() {
+				if (!pendingCode) return;
+				var editor = window.ace ? window.ace.edit('micropluginEditor') : null;
+				if (editor) {
+					editor.setValue(pendingCode, -1);
+				}
+				var ta = document.getElementById('postContent');
+				if (ta) ta.value = pendingCode;
+				discardCode();
+			}
+
+			function discardCode() {
+				pendingCode = '';
+				document.getElementById('cem-ai-result').style.display = 'none';
+				document.getElementById('cem-ai-code-preview').textContent = '';
+			}
+
+			function showResult(code) {
+				pendingCode = code;
+				document.getElementById('cem-ai-code-preview').textContent = code;
+				document.getElementById('cem-ai-result').style.display = 'block';
+				document.getElementById('cem-ai-error').style.display = 'none';
+			}
+
+			function showSpinner(msg) {
+				document.getElementById('cem-ai-spinner').style.display = 'block';
+				document.getElementById('cem-ai-spinner-text').textContent = msg || '<?php echo esc_js( __( 'Working…', 'custom-endpoints-manager' ) ); ?>';
+				document.getElementById('cem-ai-generate-btn').disabled = true;
+				document.getElementById('cem-ai-improve-btn').disabled = true;
+				document.getElementById('cem-ai-error').style.display = 'none';
+			}
+
+			function hideSpinner() {
+				document.getElementById('cem-ai-spinner').style.display = 'none';
+				document.getElementById('cem-ai-generate-btn').disabled = false;
+				document.getElementById('cem-ai-improve-btn').disabled = false;
+			}
+
+			function showError(msg) {
+				var el = document.getElementById('cem-ai-error');
+				el.textContent = msg;
+				el.style.display = 'block';
+			}
+
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', init);
+			} else {
+				init();
+			}
+		}());
+		</script>
 		<?php
 	}
 

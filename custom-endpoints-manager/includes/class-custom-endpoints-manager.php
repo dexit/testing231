@@ -66,8 +66,11 @@ class Custom_Endpoints_Manager {
 		require_once CEM_PLUGIN_DIR . 'includes/functions/class-cem-function-library.php';
 		require_once CEM_PLUGIN_DIR . 'includes/class-cem-execution-logger.php';
 		require_once CEM_PLUGIN_DIR . 'includes/class-cem-async-processor.php';
+		require_once CEM_PLUGIN_DIR . 'includes/class-cem-ai-controller.php';
+		require_once CEM_PLUGIN_DIR . 'includes/class-cem-abilities.php';
 
 		CEM_Async_Processor::init();
+		CEM_Abilities::init();
 
 		$this->loader = new Custom_Endpoints_Manager_Loader();
 	}
@@ -116,6 +119,9 @@ class Custom_Endpoints_Manager {
 	private function define_rest_api_hooks() {
 		$rest_controller = new Custom_Endpoints_Manager_REST_Controller( $this->get_plugin_name(), $this->get_version() );
 		$this->loader->add_action( 'rest_api_init', $rest_controller, 'register_routes' );
+
+		$ai_controller = new CEM_AI_Controller();
+		$this->loader->add_action( 'rest_api_init', $ai_controller, 'register_routes' );
 	}
 
 	/**
