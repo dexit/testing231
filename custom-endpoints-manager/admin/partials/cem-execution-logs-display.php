@@ -10,28 +10,15 @@ if ( ! current_user_can( 'manage_options' ) ) {
 	return;
 }
 
-// Handle retry / requeue action.
-if (
-	isset( $_GET['cem_action'], $_GET['job_id'], $_GET['_wpnonce'] ) &&
-	wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'cem_job_action' )
-) {
-	$job_id     = absint( $_GET['job_id'] );
-	$cem_action = sanitize_key( wp_unslash( $_GET['cem_action'] ) );
-
-	if ( 'requeue' === $cem_action ) {
-		CEM_Execution_Logger::requeue( $job_id );
-	}
-
-	wp_safe_redirect( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=logs&message=job_updated' ) );
-	exit;
-}
-
-// Pagination + filter.
+// Pagination + filter — read-only display params, no nonce needed.
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 $log_status_filter = isset( $_GET['log_status'] ) ? sanitize_key( wp_unslash( $_GET['log_status'] ) ) : '';
-$log_slug_filter   = isset( $_GET['log_slug'] ) ? sanitize_text_field( wp_unslash( $_GET['log_slug'] ) ) : '';
-$log_per_page      = 30;
-$log_current_page  = isset( $_GET['paged'] ) ? max( 1, absint( wp_unslash( $_GET['paged'] ) ) ) : 1;
-$log_offset        = ( $log_current_page - 1 ) * $log_per_page;
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$log_slug_filter = isset( $_GET['log_slug'] ) ? sanitize_text_field( wp_unslash( $_GET['log_slug'] ) ) : '';
+$log_per_page    = 30;
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$log_current_page = isset( $_GET['paged'] ) ? max( 1, absint( wp_unslash( $_GET['paged'] ) ) ) : 1;
+$log_offset       = ( $log_current_page - 1 ) * $log_per_page;
 
 $logs      = CEM_Execution_Logger::get_logs(
 	array(
@@ -80,7 +67,7 @@ if ( isset( $_GET['message'] ) && 'job_updated' === sanitize_key( wp_unslash( $_
 <ul class="subsubsub" style="margin-bottom:10px">
 	<?php
 	foreach ( $status_labels as $status_key => $label ) :
-		$url          = add_query_arg(
+		$url        = add_query_arg(
 			array(
 				'page'       => 'custom-endpoints-manager',
 				'tab'        => 'logs',
@@ -88,10 +75,10 @@ if ( isset( $_GET['message'] ) && 'job_updated' === sanitize_key( wp_unslash( $_
 			),
 			admin_url( 'options-general.php' )
 		);
-		$current_attr = ( $log_status_filter === $status_key ) ? ' class="current"' : '';
-		$count        = $status_counts[ $status_key ];
+		$is_current = ( $log_status_filter === $status_key );
+		$count      = $status_counts[ $status_key ];
 		?>
-		<li><a href="<?php echo esc_url( $url ); ?>"<?php echo esc_attr( $current_attr ); ?>><?php echo esc_html( $label ); ?> <span class="count">(<?php echo esc_html( $count ); ?>)</span></a> |</li>
+		<li><a href="<?php echo esc_url( $url ); ?>"<?php echo $is_current ? ' class="current"' : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static string literal. ?>><?php echo esc_html( $label ); ?> <span class="count">(<?php echo esc_html( $count ); ?>)</span></a> |</li>
 	<?php endforeach; ?>
 </ul>
 

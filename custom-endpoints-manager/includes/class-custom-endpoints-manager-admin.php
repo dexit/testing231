@@ -179,6 +179,38 @@ class Custom_Endpoints_Manager_Admin {
 	}
 
 	/**
+	 * Handle the job requeue action via admin_init (before any HTML output).
+	 *
+	 * @since 1.0.0
+	 */
+	public function handle_job_action() {
+		if (
+			! isset( $_GET['page'], $_GET['cem_action'], $_GET['job_id'], $_GET['_wpnonce'] ) ||
+			'custom-endpoints-manager' !== sanitize_key( wp_unslash( $_GET['page'] ) )
+		) {
+			return;
+		}
+
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'cem_job_action' ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$job_id     = absint( $_GET['job_id'] );
+		$cem_action = sanitize_key( wp_unslash( $_GET['cem_action'] ) );
+
+		if ( 'requeue' === $cem_action ) {
+			CEM_Execution_Logger::requeue( $job_id );
+		}
+
+		wp_safe_redirect( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=logs&message=job_updated' ) );
+		exit;
+	}
+
+	/**
 	 * Handle the save-endpoints form submission.
 	 *
 	 * @since 1.0.0

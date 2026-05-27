@@ -170,7 +170,7 @@ class Custom_Endpoints_Manager_REST_Controller {
 			);
 		}
 
-		$endpoint_slug          = sanitize_title( $target_endpoint['slug'] );
+		$endpoint_slug = sanitize_title( $target_endpoint['slug'] );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local cache file.
 		$raw_code               = file_get_contents( $microplugin_cache_file );
 		$callback_function_name = 'cem_microplugin_callback_' . $microplugin_post_id;

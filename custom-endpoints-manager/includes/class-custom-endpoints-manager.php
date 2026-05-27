@@ -93,6 +93,7 @@ class Custom_Endpoints_Manager {
 		$this->loader->add_action( 'admin_enqueue_scripts', $admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_menu', $admin, 'add_options_page' );
 		$this->loader->add_action( 'admin_init', $admin, 'save_custom_endpoints' );
+		$this->loader->add_action( 'admin_init', $admin, 'handle_job_action' );
 		$this->loader->add_action( 'admin_post_cem_install_demos', $admin, 'install_demos' );
 	}
 
