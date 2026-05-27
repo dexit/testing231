@@ -118,6 +118,37 @@ class Custom_Endpoints_Manager_Admin {
 	}
 
 	/**
+	 * Render the nav tabs for the settings page.
+	 *
+	 * @since 1.0.0
+	 * @param string $active_tab The currently active tab key.
+	 */
+	private function render_nav_tabs( string $active_tab ) {
+		$total_logs = CEM_Execution_Logger::count_logs();
+		?>
+		<nav class="nav-tab-wrapper">
+			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=endpoints' ) ); ?>"
+				class="nav-tab <?php echo 'endpoints' === $active_tab ? 'nav-tab-active' : ''; ?>">
+				<?php esc_html_e( 'Custom Endpoints', 'custom-endpoints-manager' ); ?>
+			</a>
+			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=microplugins' ) ); ?>"
+				class="nav-tab <?php echo 'microplugins' === $active_tab ? 'nav-tab-active' : ''; ?>">
+				<?php esc_html_e( 'Microplugins', 'custom-endpoints-manager' ); ?>
+			</a>
+			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=logs' ) ); ?>"
+				class="nav-tab <?php echo 'logs' === $active_tab ? 'nav-tab-active' : ''; ?>">
+				<?php
+				esc_html_e( 'Execution Logs', 'custom-endpoints-manager' );
+				if ( $total_logs ) {
+					echo ' <span class="update-plugins count-' . esc_attr( $total_logs ) . '"><span class="plugin-count">' . esc_html( $total_logs ) . '</span></span>';
+				}
+				?>
+			</a>
+		</nav>
+		<?php
+	}
+
+	/**
 	 * Render the options page.
 	 *
 	 * @since 1.0.0
@@ -125,11 +156,26 @@ class Custom_Endpoints_Manager_Admin {
 	public function display_options_page() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing flag.
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'endpoints';
-		if ( 'logs' === $tab ) {
-			include_once CEM_PLUGIN_DIR . 'admin/partials/cem-execution-logs-display.php';
-		} else {
-			include_once CEM_PLUGIN_DIR . 'admin/partials/custom-endpoints-manager-admin-display.php';
+
+		// Normalise: any unrecognised tab falls back to endpoints.
+		if ( ! in_array( $tab, array( 'endpoints', 'microplugins', 'logs' ), true ) ) {
+			$tab = 'endpoints';
 		}
+		?>
+		<div class="wrap">
+			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<?php $this->render_nav_tabs( $tab ); ?>
+			<?php
+			if ( 'logs' === $tab ) {
+				include CEM_PLUGIN_DIR . 'admin/partials/cem-execution-logs-display.php';
+			} elseif ( 'microplugins' === $tab ) {
+				include CEM_PLUGIN_DIR . 'admin/partials/cem-microplugins-display.php';
+			} else {
+				include CEM_PLUGIN_DIR . 'admin/partials/custom-endpoints-manager-admin-display.php';
+			}
+			?>
+		</div>
+		<?php
 	}
 
 	/**
@@ -173,6 +219,196 @@ class Custom_Endpoints_Manager_Admin {
 		update_option( 'cem_custom_endpoints', $endpoints );
 
 		wp_safe_redirect( admin_url( 'options-general.php?page=custom-endpoints-manager&message=saved' ) );
+		exit;
+	}
+
+	/**
+	 * Handle the demo-installer form submission.
+	 *
+	 * Creates 8 example microplugins (Hello World, HubSpot webhooks, Twilio SMS,
+	 * form submit) and registers their corresponding endpoints.
+	 *
+	 * @since 1.0.0
+	 */
+	public function install_demos() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Unauthorized' );
+		}
+		check_admin_referer( 'cem_install_demos' );
+
+		$examples_dir = CEM_PLUGIN_DIR . 'microplugins/examples/';
+		$sep          = "\n";
+
+		$demos = array(
+			array(
+				'title'        => '[CEM Demo] Hello World',
+				'file'         => '',
+				'placeholder'  => '',
+				'slug'         => 'hello',
+				'methods'      => 'GET',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] HubSpot Deal Webhook',
+				'file'         => 'example-hubspot-deal-webhook.php.example',
+				'placeholder'  => 'cem_microplugin_callback_101',
+				'slug'         => 'webhook/hubspot/deal',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] HubSpot Contact Webhook',
+				'file'         => 'example-hubspot-contact-webhook.php.example',
+				'placeholder'  => 'cem_microplugin_callback_102',
+				'slug'         => 'webhook/hubspot/contact',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] HubSpot Company Webhook',
+				'file'         => 'example-hubspot-company-webhook.php.example',
+				'placeholder'  => 'cem_microplugin_callback_103',
+				'slug'         => 'webhook/hubspot/company',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] Twilio Inbound SMS',
+				'file'         => 'example-twilio-receive-sms.php.example',
+				'placeholder'  => 'cem_microplugin_callback_104',
+				'slug'         => 'webhook/twilio',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] Twilio Dispatch SMS (async)',
+				'file'         => 'example-twilio-dispatch-sms.php.example',
+				'placeholder'  => 'cem_microplugin_callback_105',
+				'slug'         => 'dispatch/sms',
+				'methods'      => 'POST',
+				'capability'   => 'manage_options',
+				'async'        => true,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] Form to HubSpot Submit',
+				'file'         => 'example-form-to-hubspot-submit.php.example',
+				'placeholder'  => 'cem_microplugin_callback_106',
+				'slug'         => 'forms/submit',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+			array(
+				'title'        => '[CEM Demo] HubSpot Contact Enrich & Dispatch',
+				'file'         => 'example-hubspot-contact-enrich-and-dispatch.php.example',
+				'placeholder'  => 'cem_microplugin_callback_107',
+				'slug'         => 'webhook/hubspot/contact-enrich',
+				'methods'      => 'POST',
+				'capability'   => 'read',
+				'async'        => false,
+				'max_attempts' => 3,
+			),
+		);
+
+		$endpoints = get_option( 'cem_custom_endpoints', array() );
+		$installed = 0;
+
+		foreach ( $demos as $demo ) {
+			// Skip if a post with this title already exists.
+			$existing = get_posts(
+				array(
+					'post_type'      => Microplugins::POST_TYPE,
+					'post_status'    => 'any',
+					'posts_per_page' => 1,
+					'title'          => $demo['title'],
+				)
+			);
+			if ( ! empty( $existing ) ) {
+				continue;
+			}
+
+			$post_id = wp_insert_post(
+				array(
+					'post_title'   => $demo['title'],
+					'post_type'    => Microplugins::POST_TYPE,
+					'post_status'  => 'draft',
+					'post_content' => '',
+				)
+			);
+
+			if ( ! $post_id || is_wp_error( $post_id ) ) {
+				continue;
+			}
+
+			$fn = 'cem_microplugin_callback_' . $post_id;
+
+			if ( '' === $demo['file'] ) {
+				$code  = '<?php' . $sep;
+				$code .= 'function ' . $fn . '( WP_REST_Request $request ): WP_REST_Response {' . $sep;
+				$code .= '    return CEM::response( array(' . $sep;
+				$code .= "        'message' => 'Hello from WordPress!'," . $sep;
+				$code .= "        'method'  => CEM::method()," . $sep;
+				$code .= "        'time'    => CEM::now()," . $sep;
+				$code .= "        'user_id' => CEM::user_id()" . $sep;
+				$code .= '    ) );' . $sep;
+				$code .= '}';
+			} else {
+				$file_path = $examples_dir . $demo['file'];
+				if ( ! file_exists( $file_path ) ) {
+					wp_delete_post( $post_id, true );
+					continue;
+				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local plugin example file.
+				$code = file_get_contents( $file_path );
+				$code = str_replace( $demo['placeholder'], $fn, $code );
+			}
+
+			wp_update_post(
+				array(
+					'ID'           => $post_id,
+					'post_content' => $code,
+					'post_status'  => 'publish',
+				)
+			);
+
+			Microplugins::dump( $post_id );
+
+			$endpoints[] = array(
+				'slug'           => $demo['slug'],
+				'methods'        => $demo['methods'],
+				'capability'     => $demo['capability'],
+				'microplugin_id' => $post_id,
+				'args'           => '',
+				'async'          => $demo['async'],
+				'max_attempts'   => $demo['max_attempts'],
+			);
+			++$installed;
+		}
+
+		update_option( 'cem_custom_endpoints', $endpoints );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => 'custom-endpoints-manager',
+					'message' => 'demos_installed',
+					'count'   => $installed,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
 		exit;
 	}
 }

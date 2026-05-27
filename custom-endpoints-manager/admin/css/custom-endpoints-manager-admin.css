@@ -73,3 +73,66 @@
 #add-endpoint {
 	margin-top: 10px;
 }
+
+/* ── Demo installer card ─────────────────────────────────────────── */
+.cem-demo-card {
+	background: #f0f6fc;
+	border: 1px solid #72aee6;
+	border-left: 4px solid #2271b1;
+	border-radius: 3px;
+	padding: 16px 20px;
+	margin: 20px 0;
+	max-width: 640px;
+}
+
+.cem-demo-card--done {
+	background: #f0faf0;
+	border-color: #68de7c;
+	border-left-color: #00a32a;
+}
+
+.cem-demo-card h3 {
+	margin: 0 0 8px;
+	font-size: 14px;
+}
+
+.cem-demo-card p {
+	margin: 0 0 12px;
+	color: #50575e;
+}
+
+.cem-demo-card--done p {
+	margin-bottom: 0;
+}
+
+/* ── Microplugins list tab ───────────────────────────────────────── */
+.cem-mp-list-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 16px 0 12px;
+}
+
+.cem-mp-list-header h2 {
+	margin: 0;
+}
+
+.cem-mp-list-table td {
+	vertical-align: middle;
+	padding: 10px 10px;
+}
+
+.cem-mp-list-table .button + .button {
+	margin-left: 4px;
+}
+
+.cem-empty-state {
+	text-align: center;
+	padding: 40px 20px;
+	color: #646970;
+}
+
+.cem-empty-state p {
+	font-size: 14px;
+	margin-bottom: 16px;
+}
