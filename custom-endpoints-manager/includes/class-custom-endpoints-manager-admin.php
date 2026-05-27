@@ -233,6 +233,8 @@ class Custom_Endpoints_Manager_Admin {
 		if ( isset( $_POST['cem_endpoints'] ) && is_array( $_POST['cem_endpoints'] ) ) {
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			foreach ( wp_unslash( $_POST['cem_endpoints'] ) as $endpoint ) {
+				$raw_map = isset( $endpoint['response_map'] ) && is_array( $endpoint['response_map'] ) ? $endpoint['response_map'] : array();
+
 				$sanitized = array(
 					'slug'           => sanitize_title( $endpoint['slug'] ),
 					'methods'        => sanitize_text_field( $endpoint['methods'] ),
@@ -241,6 +243,15 @@ class Custom_Endpoints_Manager_Admin {
 					'args'           => isset( $endpoint['args'] ) ? sanitize_text_field( $endpoint['args'] ) : '',
 					'async'          => ! empty( $endpoint['async'] ),
 					'max_attempts'   => isset( $endpoint['max_attempts'] ) ? max( 1, min( 10, intval( $endpoint['max_attempts'] ) ) ) : 3,
+					'callback_mode'  => isset( $endpoint['callback_mode'] ) && 'function' === $endpoint['callback_mode'] ? 'function' : 'microplugin',
+					'callback_fn'    => isset( $endpoint['callback_fn'] ) ? sanitize_text_field( $endpoint['callback_fn'] ) : '',
+					'response_map'   => array(
+						'root'        => sanitize_text_field( $raw_map['root'] ?? '' ),
+						'items'       => sanitize_text_field( $raw_map['items'] ?? '' ),
+						'total_count' => sanitize_text_field( $raw_map['total_count'] ?? '' ),
+						'page'        => sanitize_text_field( $raw_map['page'] ?? '' ),
+						'total_pages' => sanitize_text_field( $raw_map['total_pages'] ?? '' ),
+					),
 				);
 				if ( ! empty( $sanitized['slug'] ) ) {
 					$endpoints[] = $sanitized;

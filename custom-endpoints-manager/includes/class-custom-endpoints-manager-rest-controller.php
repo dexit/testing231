@@ -151,9 +151,38 @@ class Custom_Endpoints_Manager_REST_Controller {
 			}
 		}
 
-		if ( ! $target_endpoint || empty( $target_endpoint['microplugin_id'] ) ) {
+		if ( ! $target_endpoint ) {
 			return new WP_Error(
 				'endpoint_not_found',
+				__( 'Custom endpoint configuration not found.', 'custom-endpoints-manager' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		// Raw function callback mode.
+		if ( isset( $target_endpoint['callback_mode'] ) && 'function' === $target_endpoint['callback_mode'] ) {
+			$raw_fn = isset( $target_endpoint['callback_fn'] ) ? sanitize_text_field( $target_endpoint['callback_fn'] ) : '';
+			if ( empty( $raw_fn ) ) {
+				return new WP_Error(
+					'callback_fn_empty',
+					__( 'No callback function configured for this endpoint.', 'custom-endpoints-manager' ),
+					array( 'status' => 500 )
+				);
+			}
+			if ( ! function_exists( $raw_fn ) ) {
+				return new WP_Error(
+					'callback_fn_missing',
+					/* translators: %s: function name */
+					sprintf( __( 'Callback function "%s" not found.', 'custom-endpoints-manager' ), $raw_fn ),
+					array( 'status' => 500 )
+				);
+			}
+			return call_user_func( $raw_fn, $request );
+		}
+
+		if ( empty( $target_endpoint['microplugin_id'] ) ) {
+			return new WP_Error(
+				'microplugin_id_missing',
 				__( 'Custom endpoint configuration or microplugin ID not found.', 'custom-endpoints-manager' ),
 				array( 'status' => 404 )
 			);

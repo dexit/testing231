@@ -319,6 +319,267 @@ class Microplugins {
 			'high',
 			array()
 		);
+
+		add_meta_box(
+			'microplugin-output-vars',
+			__( 'Output Variables', 'custom-endpoints-manager' ),
+			array( __CLASS__, 'render_output_vars_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'default',
+			array()
+		);
+
+		add_meta_box(
+			'microplugin-used-by',
+			__( 'Used By Endpoints', 'custom-endpoints-manager' ),
+			array( __CLASS__, 'render_used_by_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'default',
+			array()
+		);
+
+		add_meta_box(
+			'microplugin-cem-ref',
+			__( 'CEM Reference', 'custom-endpoints-manager' ),
+			array( __CLASS__, 'render_cem_reference_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'low',
+			array()
+		);
+	}
+
+	/**
+	 * Render the Output Variables meta box.
+	 *
+	 * @since 1.0.0
+	 */
+	public static function render_output_vars_metabox() {
+		global $post;
+		wp_nonce_field( 'cem_output_vars_nonce', 'cem_output_vars_nonce' );
+
+		$output_vars = get_post_meta( $post->ID, 'microplugin_output_vars', true );
+		if ( ! is_array( $output_vars ) ) {
+			$output_vars = array();
+		}
+		?>
+		<p style="color:#646970;font-size:11px;margin-top:0">
+			<?php esc_html_e( 'Document the keys your callback returns. Helps other developers and the Response Schema mapper.', 'custom-endpoints-manager' ); ?>
+		</p>
+		<table id="cem-output-vars-table" class="widefat fixed" style="font-size:12px">
+			<thead>
+				<tr>
+					<th style="width:40%"><?php esc_html_e( 'Key', 'custom-endpoints-manager' ); ?></th>
+					<th style="width:30%"><?php esc_html_e( 'Type', 'custom-endpoints-manager' ); ?></th>
+					<th style="width:30%"><?php esc_html_e( 'Notes', 'custom-endpoints-manager' ); ?></th>
+				</tr>
+			</thead>
+			<tbody id="cem-ov-tbody">
+				<?php if ( ! empty( $output_vars ) ) : ?>
+					<?php foreach ( $output_vars as $ov ) : ?>
+						<tr class="cem-ov-row">
+							<td>
+								<input type="text" name="cem_output_vars[][key]"
+									value="<?php echo esc_attr( $ov['key'] ); ?>"
+									placeholder="key_name"
+									style="width:100%;box-sizing:border-box" />
+							</td>
+							<td>
+								<select name="cem_output_vars[][type]" style="width:100%;box-sizing:border-box">
+									<?php foreach ( array( 'string', 'integer', 'number', 'boolean', 'array', 'object', 'null' ) as $ov_type ) : ?>
+										<option value="<?php echo esc_attr( $ov_type ); ?>"
+											<?php selected( $ov['type'], $ov_type ); ?>>
+											<?php echo esc_html( $ov_type ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+							<td>
+								<input type="text" name="cem_output_vars[][notes]"
+									value="<?php echo esc_attr( isset( $ov['notes'] ) ? $ov['notes'] : '' ); ?>"
+									placeholder="<?php esc_attr_e( 'optional description', 'custom-endpoints-manager' ); ?>"
+									style="width:100%;box-sizing:border-box" />
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				<?php endif; ?>
+			</tbody>
+		</table>
+		<p style="margin-top:8px">
+			<button type="button" id="cem-ov-add-row" class="button button-small">
+				<?php esc_html_e( '+ Add Variable', 'custom-endpoints-manager' ); ?>
+			</button>
+		</p>
+		<script>
+		( function () {
+			var types = [ 'string', 'integer', 'number', 'boolean', 'array', 'object', 'null' ];
+			var tbody = document.getElementById( 'cem-ov-tbody' );
+			var addBtn = document.getElementById( 'cem-ov-add-row' );
+			if ( ! addBtn || ! tbody ) { return; }
+			addBtn.addEventListener( 'click', function () {
+				var tr = document.createElement( 'tr' );
+				tr.className = 'cem-ov-row';
+				var typeOpts = '';
+				var tIdx;
+				for ( tIdx = 0; tIdx < types.length; tIdx++ ) {
+					typeOpts += '<option value="' + types[ tIdx ] + '">' + types[ tIdx ] + '</option>';
+				}
+				tr.innerHTML = '<td><input type="text" name="cem_output_vars[][key]" placeholder="key_name" style="width:100%;box-sizing:border-box" /></td>'
+					+ '<td><select name="cem_output_vars[][type]" style="width:100%;box-sizing:border-box">' + typeOpts + '</select></td>'
+					+ '<td><input type="text" name="cem_output_vars[][notes]" placeholder="optional description" style="width:100%;box-sizing:border-box" /></td>';
+				tbody.appendChild( tr );
+			} );
+		} )();
+		</script>
+		<?php
+	}
+
+	/**
+	 * Render the Used By Endpoints meta box.
+	 *
+	 * @since 1.0.0
+	 */
+	public static function render_used_by_metabox() {
+		global $post;
+		$post_id          = $post->ID;
+		$custom_endpoints = get_option( 'cem_custom_endpoints', array() );
+		$used_by          = array();
+
+		foreach ( $custom_endpoints as $ep ) {
+			if ( isset( $ep['microplugin_id'] ) && absint( $ep['microplugin_id'] ) === $post_id ) {
+				$used_by[] = $ep;
+			}
+		}
+
+		if ( empty( $used_by ) ) {
+			echo '<p style="color:#646970;font-size:12px">' . esc_html__( 'Not assigned to any endpoint yet.', 'custom-endpoints-manager' ) . '</p>';
+			echo '<p><a href="' . esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager' ) ) . '" class="button button-small">' . esc_html__( 'Assign to an Endpoint →', 'custom-endpoints-manager' ) . '</a></p>';
+			return;
+		}
+
+		$method_colors = array(
+			'GET'    => '#2271b1',
+			'POST'   => '#00a32a',
+			'PUT'    => '#b26200',
+			'PATCH'  => '#6d3fc0',
+			'DELETE' => '#d63638',
+		);
+
+		echo '<ul style="margin:0;padding:0;list-style:none">';
+		foreach ( $used_by as $ep ) {
+			$slug       = isset( $ep['slug'] ) ? $ep['slug'] : '';
+			$ep_methods = isset( $ep['methods'] ) ? explode( ',', $ep['methods'] ) : array();
+			echo '<li style="padding:4px 0;border-bottom:1px solid #f0f0f1;font-size:12px">';
+			foreach ( $ep_methods as $ep_method ) {
+				$ep_method = strtoupper( trim( $ep_method ) );
+				$bg_color  = isset( $method_colors[ $ep_method ] ) ? $method_colors[ $ep_method ] : '#646970';
+				$badge_css = 'display:inline-block;padding:1px 5px;border-radius:3px;background:' . $bg_color . ';color:#fff;font-size:10px;font-weight:700;margin-right:3px';
+				echo '<span style="' . esc_attr( $badge_css ) . '">' . esc_html( $ep_method ) . '</span>';
+			}
+			echo ' <code>/cem/v1/' . esc_html( $slug ) . '</code>';
+			echo '</li>';
+		}
+		echo '</ul>';
+	}
+
+	/**
+	 * Render the CEM Reference meta box.
+	 *
+	 * @since 1.0.0
+	 */
+	public static function render_cem_reference_metabox() {
+		$cem_methods = array(
+			array(
+				'sig'  => "CEM::param( 'key', \$default )",
+				'desc' => 'URL / query-string parameter.',
+			),
+			array(
+				'sig'  => 'CEM::params()',
+				'desc' => 'All query parameters as array.',
+			),
+			array(
+				'sig'  => 'CEM::body()',
+				'desc' => 'Full POST body as array.',
+			),
+			array(
+				'sig'  => "CEM::header( 'Header-Name' )",
+				'desc' => 'Raw request header value.',
+			),
+			array(
+				'sig'  => 'CEM::method()',
+				'desc' => 'HTTP method (GET, POST, …).',
+			),
+			array(
+				'sig'  => 'CEM::route()',
+				'desc' => 'Full REST route string.',
+			),
+			array(
+				'sig'  => 'CEM::user()',
+				'desc' => 'Current WP_User object.',
+			),
+			array(
+				'sig'  => 'CEM::user_id()',
+				'desc' => 'Current user ID (0 = anonymous).',
+			),
+			array(
+				'sig'  => "CEM::option( 'key', \$default )",
+				'desc' => 'get_option() shorthand.',
+			),
+			array(
+				'sig'  => "CEM::now( 'mysql' )",
+				'desc' => 'Current timestamp (mysql/U/c).',
+			),
+			array(
+				'sig'  => 'CEM::site_url( $path )',
+				'desc' => 'Site URL with optional path.',
+			),
+			array(
+				'sig'  => 'CEM::response( $data, 200 )',
+				'desc' => 'Return a WP_REST_Response.',
+			),
+			array(
+				'sig'  => "CEM::error( 'code', 'msg', 400 )",
+				'desc' => 'Return a WP_Error response.',
+			),
+			array(
+				'sig'  => 'CEM::http_get( $url, $args )',
+				'desc' => 'wp_remote_get() shorthand.',
+			),
+			array(
+				'sig'  => 'CEM::http_post( $url, $body )',
+				'desc' => 'wp_remote_post() shorthand.',
+			),
+			array(
+				'sig'  => "CEM::store( 'key', \$val, 3600 )",
+				'desc' => 'set_transient() shorthand.',
+			),
+			array(
+				'sig'  => "CEM::retrieve( 'key' )",
+				'desc' => 'get_transient() shorthand.',
+			),
+			array(
+				'sig'  => "CEM::queue( 'slug', \$payload )",
+				'desc' => 'Queue an async endpoint call.',
+			),
+		);
+		?>
+		<style>
+			#microplugin-cem-ref .cem-ref-list { margin:0;padding:0;list-style:none }
+			#microplugin-cem-ref .cem-ref-list li { padding:4px 0;border-bottom:1px solid #f0f0f1;font-size:11px }
+			#microplugin-cem-ref .cem-ref-sig { font-family:Consolas,'Courier New',monospace;color:#2271b1;font-size:11px;display:block;margin-bottom:1px }
+			#microplugin-cem-ref .cem-ref-desc { color:#646970;display:block }
+		</style>
+		<ul class="cem-ref-list">
+			<?php foreach ( $cem_methods as $ref ) : ?>
+				<li>
+					<code class="cem-ref-sig"><?php echo esc_html( $ref['sig'] ); ?></code>
+					<span class="cem-ref-desc"><?php echo esc_html( $ref['desc'] ); ?></span>
+				</li>
+			<?php endforeach; ?>
+		</ul>
+		<?php
 	}
 
 	/**
@@ -442,6 +703,25 @@ class Microplugins {
 		$post = get_post( $post_id );
 		if ( ! ( $post instanceof WP_Post ) || self::POST_TYPE !== $post->post_type ) {
 			return;
+		}
+
+		// Save output vars meta (before code validation, so it persists even on failure).
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified by WP core before save_post fires.
+		if ( isset( $_POST['cem_output_vars_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cem_output_vars_nonce'] ) ), 'cem_output_vars_nonce' ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$raw_vars   = isset( $_POST['cem_output_vars'] ) && is_array( $_POST['cem_output_vars'] ) ? wp_unslash( $_POST['cem_output_vars'] ) : array();
+			$clean_vars = array();
+			foreach ( $raw_vars as $ov ) {
+				$ov_key = isset( $ov['key'] ) ? sanitize_key( $ov['key'] ) : '';
+				if ( ! empty( $ov_key ) ) {
+					$clean_vars[] = array(
+						'key'   => $ov_key,
+						'type'  => isset( $ov['type'] ) ? sanitize_key( $ov['type'] ) : 'string',
+						'notes' => isset( $ov['notes'] ) ? sanitize_text_field( $ov['notes'] ) : '',
+					);
+				}
+			}
+			update_post_meta( $post_id, 'microplugin_output_vars', $clean_vars );
 		}
 
 		if ( 'publish' === $post->post_status ) {
