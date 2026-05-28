@@ -542,3 +542,180 @@
 	.cem-field-full    { grid-column: 1; }
 	.cem-schema-fields { grid-template-columns: 1fr; }
 }
+
+/* ── Routes status panel ─────────────────────────────────────────── */
+.cem-routes-panel {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	margin-bottom: 20px;
+	padding: 0;
+}
+
+.cem-routes-panel-title {
+	margin: 0;
+	padding: 10px 14px;
+	font-size: 13px;
+	font-weight: 600;
+	border-bottom: 1px solid #f0f0f1;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.cem-routes-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	background: #2271b1;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	border-radius: 10px;
+}
+
+.cem-async-badge {
+	display: inline-block;
+	background: #646970;
+	color: #fff;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .04em;
+}
+
+/* ── Flat card body layout ───────────────────────────────────────── */
+.cem-card-body {
+	padding: 14px 14px 0;
+}
+
+.cem-fields-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px 20px;
+	padding-bottom: 4px;
+}
+
+/* ── Card subsections (Args / Outgoing Actions) ──────────────────── */
+.cem-card-subsection {
+	border-top: 1px solid #f0f0f1;
+	padding: 12px 0 14px;
+}
+
+.cem-subsection-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.cem-subsection-head strong {
+	font-size: 12px;
+	font-weight: 600;
+	color: #3c434a;
+}
+
+/* ── Outgoing Actions section ────────────────────────────────────── */
+.cem-outgoing-flags {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-bottom: 12px;
+	padding: 8px 10px;
+	background: #f6f7f7;
+	border: 1px solid #e0e0e0;
+	border-radius: 3px;
+}
+
+.cem-flag-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #3c434a;
+	cursor: pointer;
+}
+
+.cem-flag-sep {
+	width: 1px;
+	height: 16px;
+	background: #c3c4c7;
+	flex-shrink: 0;
+}
+
+.cem-captures-link {
+	font-size: 11px;
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.cem-captures-link:hover { text-decoration: underline; }
+
+/* ── Webhook rows ────────────────────────────────────────────────── */
+.cem-webhooks-wrap {
+	margin-top: 4px;
+}
+
+.cem-webhook-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 8px;
+	padding: 8px;
+	background: #f9f9f9;
+	border: 1px solid #e0e0e0;
+	border-radius: 3px;
+}
+
+.cem-wh-method {
+	width: 90px;
+	flex-shrink: 0;
+}
+
+.cem-wh-url {
+	flex: 1;
+	min-width: 200px;
+}
+
+.cem-wh-remove {
+	color: #d63638;
+	text-decoration: none;
+	padding: 4px 6px;
+	border-radius: 3px;
+	font-size: 14px;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.cem-wh-remove:hover { background: #fcf0f1; }
+
+.cem-wh-body {
+	width: 100%;
+	box-sizing: border-box;
+	font-family: Consolas, 'Courier New', monospace;
+	font-size: 12px;
+	resize: vertical;
+	margin-top: 2px;
+}
+
+.cem-wh-body-hint {
+	width: 100%;
+	margin: 2px 0 0;
+}
+
+.cem-webhook-add-row {
+	margin-top: 4px;
+}
+
+@media screen and (max-width: 960px) {
+	.cem-webhook-row { flex-direction: column; align-items: stretch; }
+	.cem-wh-method   { width: 100%; }
+	.cem-wh-url      { min-width: 0; }
+}

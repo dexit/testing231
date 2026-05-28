@@ -257,6 +257,20 @@ class Custom_Endpoints_Manager_Admin {
 			foreach ( wp_unslash( $_POST['cem_endpoints'] ) as $endpoint ) {
 				$raw_map = isset( $endpoint['response_map'] ) && is_array( $endpoint['response_map'] ) ? $endpoint['response_map'] : array();
 
+				// Sanitize outgoing webhooks.
+				$outgoing_raw = isset( $endpoint['outgoing'] ) && is_array( $endpoint['outgoing'] ) ? $endpoint['outgoing'] : array();
+				$outgoing     = array();
+				foreach ( $outgoing_raw as $wh ) {
+					$wh_url = esc_url_raw( $wh['url'] ?? '' );
+					if ( $wh_url ) {
+						$outgoing[] = array(
+							'method'        => sanitize_text_field( $wh['method'] ?? 'POST' ),
+							'url'           => $wh_url,
+							'body_template' => sanitize_textarea_field( $wh['body_template'] ?? '' ),
+						);
+					}
+				}
+
 				$sanitized = array(
 					'slug'           => sanitize_title( $endpoint['slug'] ),
 					'methods'        => sanitize_text_field( $endpoint['methods'] ),
@@ -268,6 +282,7 @@ class Custom_Endpoints_Manager_Admin {
 					'max_attempts'   => isset( $endpoint['max_attempts'] ) ? max( 1, min( 10, intval( $endpoint['max_attempts'] ) ) ) : 3,
 					'callback_mode'  => isset( $endpoint['callback_mode'] ) && 'function' === $endpoint['callback_mode'] ? 'function' : 'microplugin',
 					'callback_fn'    => isset( $endpoint['callback_fn'] ) ? sanitize_text_field( $endpoint['callback_fn'] ) : '',
+					'outgoing'       => $outgoing,
 					'response_map'   => array(
 						'root'        => sanitize_text_field( $raw_map['root'] ?? '' ),
 						'items'       => sanitize_text_field( $raw_map['items'] ?? '' ),
