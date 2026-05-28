@@ -218,6 +218,23 @@
 			'  </div>',
 			'</div>',
 
+			// Capture section.
+			'<div class="cem-card-section cem-section-collapsed">',
+			'  <button type="button" class="cem-section-head">',
+			'    <span class="cem-section-icon">&#9654;</span>',
+			'    <strong class="cem-section-title">Capture Incoming Data</strong>',
+			'    <span class="cem-section-hint">Store payloads for visual mapping to CPT fields</span>',
+			'  </button>',
+			'  <div class="cem-section-body">',
+			'    <div class="cem-async-row">',
+			'      <label>',
+			'        <input type="checkbox" name="cem_endpoints[' + idx + '][capture]" value="1" />',
+			'        Store every incoming request payload in the Captures log',
+			'      </label>',
+			'    </div>',
+			'  </div>',
+			'</div>',
+
 			'</div>' // .cem-card-body
 		].join( '\n' );
 

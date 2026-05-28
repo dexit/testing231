@@ -210,6 +210,17 @@ class Custom_Endpoints_Manager_REST_Controller {
 			'json'  => json_decode( $request->get_body(), true ),
 		);
 
+		// Capture the raw payload if capture mode is enabled.
+		if ( ! empty( $target_endpoint['capture'] ) && class_exists( 'CEM_Data_Capture' ) ) {
+			$capture_id = CEM_Data_Capture::store( $endpoint_slug, $request->get_method(), $payload );
+
+			// Auto-apply mapping if configured.
+			$all_mappings = get_option( 'cem_endpoint_mappings', array() );
+			if ( $capture_id > 0 && ! empty( $all_mappings[ $endpoint_slug ] ) && 'auto' === ( $all_mappings[ $endpoint_slug ]['trigger'] ?? 'manual' ) ) {
+				CEM_Mapping_Engine::apply( $capture_id, $all_mappings[ $endpoint_slug ] );
+			}
+		}
+
 		// Async mode: queue the job and return 202.
 		if ( ! empty( $target_endpoint['async'] ) ) {
 			$max_attempts = max( 1, (int) ( isset( $target_endpoint['max_attempts'] ) ? $target_endpoint['max_attempts'] : CEM_Execution_Logger::MAX_ATTEMPTS ) );

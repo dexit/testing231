@@ -134,7 +134,8 @@ class Custom_Endpoints_Manager_Admin {
 	 * @param string $active_tab The currently active tab key.
 	 */
 	private function render_nav_tabs( string $active_tab ) {
-		$total_logs = CEM_Execution_Logger::count_logs();
+		$total_logs     = CEM_Execution_Logger::count_logs();
+		$total_captures = CEM_Data_Capture::count_captures();
 		?>
 		<nav class="nav-tab-wrapper">
 			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=endpoints' ) ); ?>"
@@ -144,6 +145,15 @@ class Custom_Endpoints_Manager_Admin {
 			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=microplugins' ) ); ?>"
 				class="nav-tab <?php echo 'microplugins' === $active_tab ? 'nav-tab-active' : ''; ?>">
 				<?php esc_html_e( 'Microplugins', 'custom-endpoints-manager' ); ?>
+			</a>
+			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=captures' ) ); ?>"
+				class="nav-tab <?php echo 'captures' === $active_tab ? 'nav-tab-active' : ''; ?>">
+				<?php
+				esc_html_e( 'Captures & Mapping', 'custom-endpoints-manager' );
+				if ( $total_captures ) {
+					echo ' <span class="update-plugins count-' . esc_attr( $total_captures ) . '"><span class="plugin-count">' . esc_html( $total_captures ) . '</span></span>';
+				}
+				?>
 			</a>
 			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=logs' ) ); ?>"
 				class="nav-tab <?php echo 'logs' === $active_tab ? 'nav-tab-active' : ''; ?>">
@@ -168,7 +178,7 @@ class Custom_Endpoints_Manager_Admin {
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'endpoints';
 
 		// Normalise: any unrecognised tab falls back to endpoints.
-		if ( ! in_array( $tab, array( 'endpoints', 'microplugins', 'logs' ), true ) ) {
+		if ( ! in_array( $tab, array( 'endpoints', 'microplugins', 'captures', 'logs' ), true ) ) {
 			$tab = 'endpoints';
 		}
 		?>
@@ -180,6 +190,8 @@ class Custom_Endpoints_Manager_Admin {
 				include CEM_PLUGIN_DIR . 'admin/partials/cem-execution-logs-display.php';
 			} elseif ( 'microplugins' === $tab ) {
 				include CEM_PLUGIN_DIR . 'admin/partials/cem-microplugins-display.php';
+			} elseif ( 'captures' === $tab ) {
+				include CEM_PLUGIN_DIR . 'admin/partials/cem-captures-display.php';
 			} else {
 				include CEM_PLUGIN_DIR . 'admin/partials/custom-endpoints-manager-admin-display.php';
 			}
@@ -252,6 +264,7 @@ class Custom_Endpoints_Manager_Admin {
 					'microplugin_id' => isset( $endpoint['microplugin_id'] ) ? intval( $endpoint['microplugin_id'] ) : 0,
 					'args'           => isset( $endpoint['args'] ) ? sanitize_text_field( $endpoint['args'] ) : '',
 					'async'          => ! empty( $endpoint['async'] ),
+					'capture'        => ! empty( $endpoint['capture'] ),
 					'max_attempts'   => isset( $endpoint['max_attempts'] ) ? max( 1, min( 10, intval( $endpoint['max_attempts'] ) ) ) : 3,
 					'callback_mode'  => isset( $endpoint['callback_mode'] ) && 'function' === $endpoint['callback_mode'] ? 'function' : 'microplugin',
 					'callback_fn'    => isset( $endpoint['callback_fn'] ) ? sanitize_text_field( $endpoint['callback_fn'] ) : '',
@@ -272,6 +285,83 @@ class Custom_Endpoints_Manager_Admin {
 		update_option( 'cem_custom_endpoints', $endpoints );
 
 		wp_safe_redirect( admin_url( 'options-general.php?page=custom-endpoints-manager&message=saved' ) );
+		exit;
+	}
+
+	/**
+	 * Save the capture-to-CPT mapping configuration for an endpoint.
+	 *
+	 * Triggered by the admin-post action cem_save_mapping.
+	 *
+	 * @since 1.2.0
+	 */
+	public function save_capture_mapping() {
+		if ( ! isset( $_POST['cem_mapping_nonce'] ) ) {
+			return;
+		}
+
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cem_mapping_nonce'] ) ), 'cem_save_mapping' ) ) {
+			wp_die( 'Nonce verification failed' );
+		}
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Unauthorized user' );
+		}
+
+		$slug = isset( $_POST['cem_mapping_slug'] ) ? sanitize_title( wp_unslash( $_POST['cem_mapping_slug'] ) ) : '';
+		if ( ! $slug ) {
+			wp_safe_redirect( admin_url( 'options-general.php?page=custom-endpoints-manager&tab=captures' ) );
+			exit;
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- individual fields sanitized below.
+		$raw = isset( $_POST['cem_mapping'] ) && is_array( $_POST['cem_mapping'] ) ? wp_unslash( $_POST['cem_mapping'] ) : array();
+
+		// Sanitize field rules.
+		$fields     = array();
+		$raw_fields = is_array( $raw['fields'] ?? null ) ? $raw['fields'] : array();
+		foreach ( $raw_fields as $rule ) {
+			$source = sanitize_text_field( $rule['source'] ?? '' );
+			$target = sanitize_text_field( $rule['target'] ?? '' );
+			if ( $source && $target ) {
+				$fields[] = array(
+					'source' => $source,
+					'target' => $target,
+				);
+			}
+		}
+
+		// Sanitize chains.
+		$chains     = array();
+		$raw_chains = is_array( $raw['chains'] ?? null ) ? $raw['chains'] : array();
+		foreach ( $raw_chains as $ch ) {
+			$url = esc_url_raw( $ch['url'] ?? '' );
+			if ( $url ) {
+				$chains[] = array(
+					'type'   => sanitize_key( $ch['type'] ?? 'webhook' ),
+					'method' => sanitize_text_field( $ch['method'] ?? 'POST' ),
+					'url'    => $url,
+				);
+			}
+		}
+
+		$mapping = array(
+			'cpt'             => sanitize_key( $raw['cpt'] ?? 'post' ),
+			'trigger'         => in_array( $raw['trigger'] ?? '', array( 'auto', 'manual' ), true ) ? $raw['trigger'] : 'manual',
+			'update_existing' => ! empty( $raw['update_existing'] ),
+			'match_source'    => sanitize_text_field( $raw['match_source'] ?? '' ),
+			'match_field'     => sanitize_text_field( $raw['match_field'] ?? '' ),
+			'fields'          => $fields,
+			'chains'          => $chains,
+		);
+
+		$all_mappings          = get_option( 'cem_endpoint_mappings', array() );
+		$all_mappings[ $slug ] = $mapping;
+		update_option( 'cem_endpoint_mappings', $all_mappings );
+
+		wp_safe_redirect(
+			admin_url( 'options-general.php?page=custom-endpoints-manager&tab=captures&cap_slug=' . rawurlencode( $slug ) . '&mapping_saved=1' )
+		);
 		exit;
 	}
 

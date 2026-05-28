@@ -68,6 +68,9 @@ class Custom_Endpoints_Manager {
 		require_once CEM_PLUGIN_DIR . 'includes/class-cem-async-processor.php';
 		require_once CEM_PLUGIN_DIR . 'includes/class-cem-ai-controller.php';
 		require_once CEM_PLUGIN_DIR . 'includes/class-cem-abilities.php';
+		require_once CEM_PLUGIN_DIR . 'includes/class-cem-data-capture.php';
+		require_once CEM_PLUGIN_DIR . 'includes/class-cem-mapping-engine.php';
+		require_once CEM_PLUGIN_DIR . 'includes/class-cem-captures-rest-controller.php';
 
 		CEM_Async_Processor::init();
 		CEM_Abilities::init();
@@ -98,6 +101,7 @@ class Custom_Endpoints_Manager {
 		$this->loader->add_action( 'admin_init', $admin, 'save_custom_endpoints' );
 		$this->loader->add_action( 'admin_init', $admin, 'handle_job_action' );
 		$this->loader->add_action( 'admin_post_cem_install_demos', $admin, 'install_demos' );
+		$this->loader->add_action( 'admin_post_cem_save_mapping', $admin, 'save_capture_mapping' );
 	}
 
 	/**
@@ -122,6 +126,9 @@ class Custom_Endpoints_Manager {
 
 		$ai_controller = new CEM_AI_Controller();
 		$this->loader->add_action( 'rest_api_init', $ai_controller, 'register_routes' );
+
+		$captures_controller = new CEM_Captures_REST_Controller();
+		$this->loader->add_action( 'rest_api_init', $captures_controller, 'register_routes' );
 	}
 
 	/**

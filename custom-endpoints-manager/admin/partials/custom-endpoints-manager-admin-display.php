@@ -113,6 +113,7 @@ if ( isset( $_GET['message'] ) ) :
 			$cap_val        = isset( $endpoint['capability'] ) ? $endpoint['capability'] : 'read';
 			$args_val       = isset( $endpoint['args'] ) ? $endpoint['args'] : '';
 			$is_async       = ! empty( $endpoint['async'] );
+			$is_capture     = ! empty( $endpoint['capture'] );
 			$max_attempts   = isset( $endpoint['max_attempts'] ) ? absint( $endpoint['max_attempts'] ) : 3;
 			$callback_mode  = isset( $endpoint['callback_mode'] ) && 'function' === $endpoint['callback_mode'] ? 'function' : 'microplugin';
 			$callback_fn    = isset( $endpoint['callback_fn'] ) ? $endpoint['callback_fn'] : '';
@@ -476,6 +477,36 @@ if ( isset( $_GET['message'] ) ) :
 						</div>
 					</div><!-- .cem-section-body -->
 				</div><!-- .cem-card-section (async) -->
+
+				<!-- Capture section -->
+				<div class="cem-card-section <?php echo $is_capture ? '' : 'cem-section-collapsed'; ?>">
+					<button type="button" class="cem-section-head">
+						<span class="cem-section-icon">&#9654;</span>
+						<strong class="cem-section-title"><?php esc_html_e( 'Capture Incoming Data', 'custom-endpoints-manager' ); ?></strong>
+						<span class="cem-section-hint"><?php esc_html_e( 'Store payloads for visual mapping to CPT fields', 'custom-endpoints-manager' ); ?></span>
+					</button>
+					<div class="cem-section-body">
+						<div class="cem-async-row">
+							<label>
+								<input type="checkbox"
+									name="cem_endpoints[<?php echo esc_attr( $i ); ?>][capture]"
+									value="1"
+									<?php checked( $is_capture ); ?> />
+								<?php esc_html_e( 'Store every incoming request payload in the Captures log', 'custom-endpoints-manager' ); ?>
+							</label>
+						</div>
+						<?php if ( $is_capture ) : ?>
+							<p style="font-size:12px;color:#646970;margin:6px 0 0">
+								<?php
+								$cap_url = admin_url( 'options-general.php?page=custom-endpoints-manager&tab=captures&cap_slug=' . rawurlencode( isset( $endpoint['slug'] ) ? sanitize_title( $endpoint['slug'] ) : '' ) );
+								?>
+								<a href="<?php echo esc_url( $cap_url ); ?>">
+									<?php esc_html_e( '&#8594; View captures &amp; configure mapping', 'custom-endpoints-manager' ); ?>
+								</a>
+							</p>
+						<?php endif; ?>
+					</div><!-- .cem-section-body -->
+				</div><!-- .cem-card-section (capture) -->
 
 			</div><!-- .cem-card-body -->
 

@@ -29,6 +29,7 @@ define( 'MICROPLUGINS_CACHE_DIR', MICROPLUGINS_DIR . '/cache' );
 define( 'MICROPLUGINS_URI', CEM_PLUGIN_URL . 'microplugins/' );
 
 require_once CEM_PLUGIN_DIR . 'includes/class-custom-endpoints-manager.php';
+require_once CEM_PLUGIN_DIR . 'includes/class-cem-data-capture.php';
 require_once MICROPLUGINS_DIR . '/class-microplugins.php';
 
 /**
@@ -44,3 +45,4 @@ function run_custom_endpoints_manager() {
 run_custom_endpoints_manager();
 
 register_activation_hook( __FILE__, array( 'Microplugins', 'activation_hook' ) );
+register_activation_hook( __FILE__, array( 'CEM_Data_Capture', 'install' ) );
