@@ -1,0 +1,100 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: HubSpot Deal Stage Changed Webhook
+ *
+ * Endpoint setup:
+ *   Slug:        webhook/hubspot/deal
+ *   Methods:     POST
+ *   Capability:  read          (public — HubSpot sends unauthenticated)
+ *   Async:       No            (acknowledge quickly, then queue downstream dispatch)
+ *
+ * HubSpot webhook subscription: deal.propertyChange → dealstage, amount, dealname
+ *
+ * HubSpot payload (array of events):
+ * [
+ *   {
+ *     "objectId":         12345,
+ *     "propertyName":     "dealstage",
+ *     "propertyValue":    "closedwon",
+ *     "subscriptionType": "deal.propertyChange",
+ *     "portalId":         999,
+ *     "occurredAt":       1712345678000
+ *   }
+ * ]
+ *
+ * WP options used:
+ *   cem_hubspot_secret  — HubSpot client secret (for signature validation)
+ *
+ * What this does:
+ *  1. Validates HubSpot signature (optional but recommended)
+ *  2. Merges events into stored deal data (transient key: cem_deal_{objectId})
+ *  3. If dealstage = closedwon → queues async SMS dispatch job
+ *  4. Returns 200 OK so HubSpot stops retrying
+ *
+ * Replace 101 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_101( WP_REST_Request $request ) {
+    // ── 1. Validate HubSpot signature (v3) ─────────────────────────────────
+    $secret  = CEM::option( 'cem_hubspot_secret' );
+    $sig_v3  = CEM::header( 'X-HubSpot-Signature-V3' );
+
+    if ( $secret && $sig_v3 ) {
+        $timestamp = CEM::header( 'X-HubSpot-Request-Timestamp' );
+        // Reject requests older than 5 minutes
+        if ( abs( time() * 1000 - (int) $timestamp ) > 300000 ) {
+            return CEM::error( 'expired_request', 'Request timestamp too old.', 400 );
+        }
+        $method    = CEM::method();
+        $uri       = CEM::site_url( '/wp-json/cem/v1/webhook/hubspot/deal' );
+        $body      = $request->get_body();
+        $expected  = base64_encode( hash_hmac( 'sha256', $method . $uri . $body . $timestamp, $secret, true ) );
+        if ( ! hash_equals( $expected, (string) $sig_v3 ) ) {
+            return CEM::error( 'invalid_signature', 'HubSpot signature mismatch.', 401 );
+        }
+    }
+
+    // ── 2. Parse events ─────────────────────────────────────────────────────
+    $events = CEM::body();
+    if ( empty( $events ) || ! is_array( $events ) ) {
+        return CEM::error( 'invalid_payload', 'Expected JSON array of events.', 400 );
+    }
+
+    $processed = array();
+
+    foreach ( $events as $event ) {
+        $object_id  = (int) Lib::extract_field( $event, 'objectId', 0 );
+        $prop_name  = Lib::extract_field( $event, 'propertyName', '' );
+        $prop_value = Lib::extract_field( $event, 'propertyValue', '' );
+        $occurred   = Lib::extract_field( $event, 'occurredAt', 0 );
+
+        if ( ! $object_id ) {
+            continue;
+        }
+
+        // ── 3. Merge into stored deal data ──────────────────────────────────
+        $key  = 'deal_' . $object_id;
+        $deal = CEM::retrieve( $key, array() );
+
+        $deal['object_id']  = $object_id;
+        $deal['portal_id']  = Lib::extract_field( $event, 'portalId', 0 );
+        $deal['updated_at'] = gmdate( 'Y-m-d H:i:s', (int) ( $occurred / 1000 ) );
+
+        // Map whichever property changed
+        $deal[ Lib::sanitize_slug( $prop_name ) ] = $prop_value;
+
+        CEM::store( $key, $deal, 7 * DAY_IN_SECONDS );
+
+        // ── 4. Trigger downstream async job on deal won ──────────────────────
+        if ( 'dealstage' === $prop_name && 'closedwon' === $prop_value ) {
+            CEM::queue( 'dispatch/sms', array(
+                'to'      => CEM::option( 'cem_sales_alert_phone' ),
+                'message' => "Deal #{$object_id} closed WON! 🎉 Check HubSpot for details.",
+                'context' => $deal,
+            ) );
+        }
+
+        $processed[] = array( 'object_id' => $object_id, 'property' => $prop_name, 'value' => $prop_value );
+    }
+
+    return CEM::response( array( 'received' => count( $processed ), 'events' => $processed ) );
+}

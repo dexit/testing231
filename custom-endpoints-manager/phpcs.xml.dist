@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="Custom Endpoints Manager">
+	<description>PHPCS ruleset for Custom Endpoints Manager plugin.</description>
+
+	<rule ref="WordPress"/>
+
+	<arg name="extensions" value="php,js,css"/>
+
+	<!-- Exclude third-party vendor assets. -->
+	<exclude-pattern>*/assets/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+</ruleset>

@@ -1,0 +1,137 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: Receive HTML Form POST → Submit to HubSpot Forms API v3
+ *
+ * Endpoint setup:
+ *   Slug:        forms/submit
+ *   Methods:     POST
+ *   Capability:  read           (public — called from frontend form)
+ *   Async:       No             (respond immediately to form submitter)
+ *
+ * WP options used:
+ *   cem_hubspot_portal_id   — HubSpot Portal ID (e.g. 12345678)
+ *   cem_hubspot_form_guid   — HubSpot Form GUID (from form settings)
+ *   cem_hubspot_api_key     — HubSpot Private App Token (for contact enrichment)
+ *
+ * Expected POST params (HTML form fields):
+ *   firstname, lastname, email, phone, company, message
+ *   hs_context  (optional) — JSON string from HubSpot tracking cookie
+ *
+ * HubSpot Forms API v3 endpoint:
+ *   POST https://api.hsforms.com/submissions/v3/integration/submit/{portalId}/{formGuid}
+ *
+ * What this does:
+ *  1. Sanitizes and validates inbound form fields
+ *  2. Builds HubSpot submission payload (fields array + context)
+ *  3. POSTs to HubSpot Forms API v3
+ *  4. Stores submission locally (transient) for audit trail
+ *  5. Returns success/error JSON to frontend
+ *
+ * Replace 106 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_106( WP_REST_Request $request ) {
+    // ── Config ───────────────────────────────────────────────────────────────
+    $portal_id = CEM::option( 'cem_hubspot_portal_id' );
+    $form_guid = CEM::option( 'cem_hubspot_form_guid' );
+
+    if ( ! $portal_id || ! $form_guid ) {
+        return CEM::error( 'missing_config', 'HubSpot portal ID or form GUID not configured.', 500 );
+    }
+
+    // ── Sanitize fields ───────────────────────────────────────────────────────
+    $firstname = sanitize_text_field( CEM::param( 'firstname', '' ) );
+    $lastname  = sanitize_text_field( CEM::param( 'lastname', '' ) );
+    $email     = sanitize_email( CEM::param( 'email', '' ) );
+    $phone     = sanitize_text_field( CEM::param( 'phone', '' ) );
+    $company   = sanitize_text_field( CEM::param( 'company', '' ) );
+    $message   = sanitize_textarea_field( CEM::param( 'message', '' ) );
+
+    if ( ! Lib::validate_email( $email ) ) {
+        return CEM::error( 'invalid_email', 'A valid email address is required.', 400 );
+    }
+    if ( empty( $firstname ) || empty( $lastname ) ) {
+        return CEM::error( 'missing_name', 'First name and last name are required.', 400 );
+    }
+
+    // ── Build HubSpot fields array ────────────────────────────────────────────
+    $fields = array_filter( array(
+        array( 'objectTypeId' => '0-1', 'name' => 'firstname',   'value' => $firstname ),
+        array( 'objectTypeId' => '0-1', 'name' => 'lastname',    'value' => $lastname  ),
+        array( 'objectTypeId' => '0-1', 'name' => 'email',       'value' => $email     ),
+        array( 'objectTypeId' => '0-1', 'name' => 'phone',       'value' => $phone     ),
+        array( 'objectTypeId' => '0-1', 'name' => 'company',     'value' => $company   ),
+        array( 'objectTypeId' => '0-1', 'name' => 'message',     'value' => $message   ),
+    ), function( $f ) { return ! empty( $f['value'] ); } );
+
+    // ── Context (HubSpot tracking) ────────────────────────────────────────────
+    $hs_context_raw = CEM::param( 'hs_context', '' );
+    $hs_context     = Lib::parse_json_string( $hs_context_raw );
+
+    $context = array(
+        'pageUri'   => sanitize_url( Lib::extract_field( $hs_context, 'pageUri', CEM::header( 'Referer' ) ?? '' ) ),
+        'pageName'  => sanitize_text_field( Lib::extract_field( $hs_context, 'pageName', '' ) ),
+        'ipAddress' => sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' ),
+    );
+
+    $hutk = sanitize_text_field( Lib::extract_field( $hs_context, 'hutk', '' ) );
+    if ( $hutk ) {
+        $context['hutk'] = $hutk;
+    }
+
+    // ── POST to HubSpot Forms API v3 ─────────────────────────────────────────
+    $hs_url     = "https://api.hsforms.com/submissions/v3/integration/submit/{$portal_id}/{$form_guid}";
+    $hs_payload = array(
+        'fields'             => array_values( $fields ),
+        'context'            => $context,
+        'legalConsentOptions' => array(
+            'consent' => array(
+                'consentToProcess' => true,
+                'text'             => 'I agree to allow this website to store and process my personal data.',
+            ),
+        ),
+    );
+
+    $resp = CEM::http_post(
+        $hs_url,
+        wp_json_encode( $hs_payload ),
+        array(
+            'headers' => array(
+                'Content-Type' => 'application/json',
+            ),
+        )
+    );
+
+    if ( isset( $resp['error'] ) ) {
+        return CEM::error( 'http_error', $resp['error'], 502 );
+    }
+
+    $hs_body = json_decode( $resp['body'], true ) ?: array();
+
+    // ── Store submission locally ──────────────────────────────────────────────
+    $submission = array(
+        'email'      => $email,
+        'firstname'  => $firstname,
+        'lastname'   => $lastname,
+        'phone'      => $phone,
+        'company'    => $company,
+        'submitted'  => CEM::now(),
+        'hs_status'  => $resp['status'],
+        'hs_resp'    => $hs_body,
+        'source_url' => $context['pageUri'],
+    );
+    $key = 'form_submission_' . md5( $email . CEM::now() );
+    CEM::store( $key, $submission, 90 * DAY_IN_SECONDS );
+
+    // ── Handle HubSpot errors ─────────────────────────────────────────────────
+    if ( $resp['status'] < 200 || $resp['status'] >= 300 ) {
+        $error_msg = Lib::extract_field( $hs_body, 'message', 'HubSpot submission failed.' );
+        return CEM::error( 'hs_error', $error_msg, 502 );
+    }
+
+    return CEM::response( array(
+        'success'        => true,
+        'message'        => 'Thank you! Your submission has been received.',
+        'redirectUrl'    => Lib::extract_field( $hs_body, 'redirectUri', '' ),
+        'inlineMessage'  => Lib::extract_field( $hs_body, 'inlineMessage', '' ),
+    ) );
+}

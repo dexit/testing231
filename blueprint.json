@@ -1,0 +1,41 @@
+{
+  "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+  "preferredVersions": {
+    "php": "8.2",
+    "wp": "latest"
+  },
+  "phpExtensionBundles": ["kitchen-sink"],
+  "features": {
+    "networking": false
+  },
+  "steps": [
+    {
+      "step": "login",
+      "username": "admin",
+      "password": "password"
+    },
+    {
+      "step": "installPlugin",
+      "pluginZipFile": {
+        "resource": "url",
+        "url": "https://github.com/dexit/testing231/archive/refs/heads/main.zip"
+      },
+      "options": {
+        "activate": true
+      }
+    },
+    {
+      "step": "writeFile",
+      "path": "/wordpress/cem-demo-setup.php",
+      "data": "<?php\nrequire '/wordpress/wp-load.php';\n\n$plugin_dir = WP_CONTENT_DIR . '/plugins/custom-endpoints-manager/';\n$examples   = $plugin_dir . 'microplugins/examples/';\n$endpoints  = array();\n$sep        = chr(10);\n\n$demos = array(\n    array( 'title' => '[CEM Demo] Hello World',                             'file' => '',                                                       'placeholder' => '',                              'slug' => 'hello',                          'methods' => 'GET',  'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] HubSpot Deal Webhook',                   'file' => 'example-hubspot-deal-webhook.php.example',                'placeholder' => 'cem_microplugin_callback_101',  'slug' => 'webhook/hubspot/deal',           'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] HubSpot Contact Webhook',                'file' => 'example-hubspot-contact-webhook.php.example',             'placeholder' => 'cem_microplugin_callback_102',  'slug' => 'webhook/hubspot/contact',        'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] HubSpot Company Webhook',                'file' => 'example-hubspot-company-webhook.php.example',             'placeholder' => 'cem_microplugin_callback_103',  'slug' => 'webhook/hubspot/company',        'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] Twilio Inbound SMS',                     'file' => 'example-twilio-receive-sms.php.example',                  'placeholder' => 'cem_microplugin_callback_104',  'slug' => 'webhook/twilio',                 'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] Twilio Dispatch SMS (async)',            'file' => 'example-twilio-dispatch-sms.php.example',                 'placeholder' => 'cem_microplugin_callback_105',  'slug' => 'dispatch/sms',                   'methods' => 'POST', 'capability' => 'manage_options', 'async' => true,  'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] Form to HubSpot Submit',                 'file' => 'example-form-to-hubspot-submit.php.example',              'placeholder' => 'cem_microplugin_callback_106',  'slug' => 'forms/submit',                   'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n    array( 'title' => '[CEM Demo] HubSpot Contact Enrich & Dispatch',      'file' => 'example-hubspot-contact-enrich-and-dispatch.php.example', 'placeholder' => 'cem_microplugin_callback_107',  'slug' => 'webhook/hubspot/contact-enrich', 'methods' => 'POST', 'capability' => 'read',           'async' => false, 'max_attempts' => 3 ),\n);\n\nforeach ( $demos as $demo ) {\n    $post_id = wp_insert_post( array(\n        'post_title'   => $demo['title'],\n        'post_type'    => 'microplugin',\n        'post_status'  => 'draft',\n        'post_content' => '',\n    ) );\n    if ( ! $post_id || is_wp_error( $post_id ) ) {\n        continue;\n    }\n\n    $fn = 'cem_microplugin_callback_' . $post_id;\n\n    if ( '' === $demo['file'] ) {\n        $code = '<?php' . $sep\n            . 'function ' . $fn . '( WP_REST_Request $request ): WP_REST_Response {' . $sep\n            . '    return CEM::response( array(' . $sep\n            . \"        'message' => 'Hello from WordPress Playground!',\" . $sep\n            . \"        'method'  => CEM::method(),\" . $sep\n            . \"        'time'    => CEM::now(),\" . $sep\n            . \"        'user_id' => CEM::user_id()\" . $sep\n            . '    ) );' . $sep\n            . '}';\n    } else {\n        $file_path = $examples . $demo['file'];\n        if ( ! file_exists( $file_path ) ) {\n            continue;\n        }\n        $code = file_get_contents( $file_path );\n        $code = str_replace( $demo['placeholder'], $fn, $code );\n    }\n\n    wp_update_post( array(\n        'ID'           => $post_id,\n        'post_content' => $code,\n        'post_status'  => 'publish',\n    ) );\n    Microplugins::dump( $post_id );\n\n    $endpoints[] = array(\n        'slug'           => $demo['slug'],\n        'methods'        => $demo['methods'],\n        'capability'     => $demo['capability'],\n        'microplugin_id' => $post_id,\n        'args'           => '',\n        'async'          => $demo['async'],\n        'max_attempts'   => $demo['max_attempts'],\n    );\n}\n\nif ( ! empty( $endpoints ) ) {\n    update_option( 'cem_custom_endpoints', $endpoints );\n}\n"
+    },
+    {
+      "step": "runPHP",
+      "code": "<?php require '/wordpress/cem-demo-setup.php';"
+    },
+    {
+      "step": "redirect",
+      "url": "/wp-admin/options-general.php?page=custom-endpoints-manager"
+    }
+  ]
+}

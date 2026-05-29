@@ -1,0 +1,544 @@
+/* Custom Endpoints Manager — Admin Styles */
+
+/* ── Shared status / cache badges ───────────────────────────────── */
+.cem-mp-status {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 3px;
+	font-weight: 600;
+	color: #fff;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+}
+
+.cem-status-publish { background: #00a32a; }
+.cem-status-pending { background: #dba617; color: #1d2327; }
+.cem-status-draft   { background: #646970; }
+
+.cem-mp-cache     { font-size: 11px; }
+.cem-mp-cache-ok  { color: #00a32a; }
+.cem-mp-cache-miss { color: #d63638; }
+
+/* ── Endpoint cards ──────────────────────────────────────────────── */
+.cem-endpoints-stack {
+	margin: 12px 0 0;
+}
+
+.cem-endpoint-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-left: 4px solid #c3c4c7;
+	border-radius: 3px;
+	margin-bottom: 8px;
+	box-shadow: 0 1px 2px rgba(0,0,0,.05);
+	transition: border-left-color .15s;
+}
+
+.cem-endpoint-card.is-ready   { border-left-color: #00a32a; }
+.cem-endpoint-card.is-warning { border-left-color: #dba617; }
+
+/* Card header */
+.cem-card-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.cem-card-header:hover { background: #f9f9f9; }
+
+.cem-card-methods {
+	display: flex;
+	gap: 3px;
+	flex-shrink: 0;
+}
+
+.cem-hdr-method {
+	display: inline-block;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .04em;
+	color: #fff;
+}
+
+.cem-hdr-method--get    { background: #2271b1; }
+.cem-hdr-method--post   { background: #00a32a; }
+.cem-hdr-method--put    { background: #b26200; }
+.cem-hdr-method--patch  { background: #6d3fc0; }
+.cem-hdr-method--delete { background: #d63638; }
+.cem-hdr-method--other  { background: #646970; }
+
+.cem-card-route {
+	flex: 1;
+	font-family: Consolas, 'Courier New', monospace;
+	font-size: 12px;
+	color: #646970;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cem-card-route strong {
+	color: #1d2327;
+}
+
+.cem-card-mp-status {
+	flex-shrink: 0;
+}
+
+.cem-card-header-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.cem-card-toggle,
+.cem-card-remove {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: 3px;
+	color: #646970;
+	font-size: 14px;
+	line-height: 1;
+}
+
+.cem-card-toggle:hover { background: #f0f0f1; color: #1d2327; }
+.cem-card-remove:hover { background: #fcf0f1; color: #d63638; }
+
+/* Card body */
+.cem-card-body {
+	padding: 16px 14px 14px;
+	border-top: 1px solid #f0f0f1;
+}
+
+.cem-endpoint-card.is-collapsed .cem-card-body { display: none; }
+.cem-endpoint-card.is-collapsed .cem-card-toggle { transform: rotate(-90deg); }
+
+/* Fields grid */
+.cem-fields-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px 20px;
+}
+
+.cem-field-full { grid-column: 1 / -1; }
+
+.cem-field-group label,
+.cem-field-group > .cem-field-label {
+	display: block;
+	font-weight: 600;
+	font-size: 12px;
+	margin-bottom: 5px;
+	color: #3c434a;
+}
+
+.cem-field-group input[type="text"],
+.cem-field-group input[type="number"],
+.cem-field-group select {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.cem-field-group .description {
+	font-size: 11px;
+	color: #646970;
+	margin: 4px 0 0;
+}
+
+/* Slug field with prefix */
+.cem-slug-row {
+	display: flex;
+	align-items: center;
+	border: 1px solid #8c8f94;
+	border-radius: 3px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.cem-slug-row:focus-within { border-color: #2271b1; box-shadow: 0 0 0 1px #2271b1; }
+
+.cem-slug-prefix {
+	padding: 0 6px 0 8px;
+	font-size: 11px;
+	color: #646970;
+	background: #f6f7f7;
+	border-right: 1px solid #c3c4c7;
+	white-space: nowrap;
+	font-family: Consolas, 'Courier New', monospace;
+	line-height: 30px;
+}
+
+.cem-slug-row input[type="text"] {
+	border: none;
+	box-shadow: none;
+	outline: none;
+	padding: 0 8px;
+	flex: 1;
+	min-width: 0;
+	font-family: Consolas, 'Courier New', monospace;
+	font-size: 12px;
+}
+
+/* Method pills */
+.cem-method-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+
+.cem-method-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .03em;
+	color: #50575e;
+	background: #fff;
+	transition: background .1s, color .1s, border-color .1s;
+	user-select: none;
+}
+
+.cem-method-pill input[type="checkbox"] {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.cem-method-pill.is-active { color: #fff; border-color: transparent; }
+.cem-method-pill.is-active[data-method="GET"]    { background: #2271b1; }
+.cem-method-pill.is-active[data-method="POST"]   { background: #00a32a; }
+.cem-method-pill.is-active[data-method="PUT"]    { background: #b26200; }
+.cem-method-pill.is-active[data-method="PATCH"]  { background: #6d3fc0; }
+.cem-method-pill.is-active[data-method="DELETE"] { background: #d63638; }
+
+/* Capability datalist input */
+.cem-capability-wrap {
+	position: relative;
+}
+
+/* Microplugin context panel */
+.cem-mp-context {
+	margin-top: 8px;
+	padding: 8px 10px;
+	background: #f6f7f7;
+	border: 1px solid #e0e0e0;
+	border-radius: 3px;
+	font-size: 11px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.cem-mp-context code {
+	font-size: 11px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	padding: 1px 4px;
+	border-radius: 2px;
+}
+
+.cem-mp-context-warn {
+	color: #b26200;
+	font-size: 11px;
+	margin-top: 6px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.cem-mp-edit-link {
+	font-size: 11px;
+	text-decoration: none;
+	color: #2271b1;
+}
+
+.cem-mp-edit-link:hover { text-decoration: underline; }
+
+/* Async toggle row */
+.cem-async-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.cem-async-attempts {
+	display: none;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+
+.cem-async-attempts.is-visible { display: flex; }
+
+.cem-async-attempts input[type="number"] {
+	width: 55px;
+}
+
+/* Add endpoint button row */
+.cem-add-row {
+	margin-top: 8px;
+}
+
+/* ── Demo installer card ─────────────────────────────────────────── */
+.cem-demo-card {
+	background: #f0f6fc;
+	border: 1px solid #72aee6;
+	border-left: 4px solid #2271b1;
+	border-radius: 3px;
+	padding: 16px 20px;
+	margin: 20px 0;
+	max-width: 640px;
+}
+
+.cem-demo-card--done {
+	background: #f0faf0;
+	border-color: #68de7c;
+	border-left-color: #00a32a;
+}
+
+.cem-demo-card h3 { margin: 0 0 8px; font-size: 14px; }
+.cem-demo-card p  { margin: 0 0 12px; color: #50575e; }
+.cem-demo-card--done p { margin-bottom: 0; }
+
+/* ── Microplugins list tab ───────────────────────────────────────── */
+.cem-mp-list-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin: 16px 0 12px;
+}
+
+.cem-mp-list-header h2 { margin: 0; }
+
+.cem-mp-list-table td {
+	vertical-align: middle;
+	padding: 10px;
+}
+
+.cem-mp-list-table .button + .button { margin-left: 4px; }
+
+.cem-empty-state {
+	text-align: center;
+	padding: 40px 20px;
+	color: #646970;
+}
+
+.cem-empty-state p { font-size: 14px; margin-bottom: 16px; }
+
+/* ── Card sections (Arguments / Schema / Async) ──────────────────── */
+.cem-primary-fields {
+	padding: 16px 14px 12px;
+}
+
+.cem-card-section {
+	border-top: 1px solid #f0f0f1;
+}
+
+.cem-section-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 9px 14px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-align: left;
+	color: #3c434a;
+	font-size: 13px;
+}
+
+.cem-section-head:hover { background: #f9f9f9; }
+
+.cem-section-icon {
+	display: inline-block;
+	font-size: 10px;
+	color: #8c8f94;
+	transition: transform .15s;
+	width: 10px;
+	flex-shrink: 0;
+}
+
+.cem-card-section:not(.cem-section-collapsed) .cem-section-icon {
+	transform: rotate(90deg);
+}
+
+.cem-section-title {
+	font-weight: 600;
+	font-size: 12px;
+}
+
+.cem-section-hint {
+	color: #8c8f94;
+	font-size: 11px;
+	font-weight: 400;
+}
+
+.cem-section-body {
+	padding: 12px 14px 14px;
+}
+
+.cem-card-section.cem-section-collapsed .cem-section-body { display: none; }
+
+/* ── Callback mode tabs ──────────────────────────────────────────── */
+.cem-callback-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 5px;
+}
+
+.cem-callback-label-row label {
+	margin-bottom: 0 !important;
+}
+
+.cem-callback-tabs {
+	display: flex;
+	gap: 2px;
+}
+
+.cem-cb-tab {
+	padding: 2px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	color: #646970;
+}
+
+.cem-cb-tab.is-active {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+}
+
+.cem-mp-select-row {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.cem-mp-select-row select { flex: 1; }
+
+.cem-callback-fn-input { width: 100%; box-sizing: border-box; }
+
+/* ── Arg builder table ───────────────────────────────────────────── */
+.cem-arg-table {
+	margin-bottom: 0;
+}
+
+.cem-arg-table td,
+.cem-arg-table th {
+	padding: 6px 8px;
+	vertical-align: middle;
+}
+
+.cem-arg-remove {
+	color: #d63638;
+	text-decoration: none;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.cem-arg-remove:hover { background: #fcf0f1; }
+
+.cem-arg-actions {
+	margin-top: 8px;
+}
+
+.cem-detected-hint {
+	margin-bottom: 8px;
+}
+
+/* ── Response schema section ─────────────────────────────────────── */
+.cem-schema-paste-row {
+	margin-bottom: 12px;
+}
+
+.cem-schema-paste-label {
+	display: block;
+	font-weight: 600;
+	font-size: 12px;
+	margin-bottom: 5px;
+	color: #3c434a;
+}
+
+.cem-schema-json {
+	width: 100%;
+	box-sizing: border-box;
+	font-family: Consolas, 'Courier New', monospace;
+	font-size: 12px;
+	margin-bottom: 6px;
+	resize: vertical;
+}
+
+.cem-schema-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px 16px;
+}
+
+.cem-schema-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.cem-schema-row label {
+	width: 100px;
+	flex-shrink: 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: #3c434a;
+}
+
+.cem-schema-row input[type="text"] {
+	flex: 1;
+	min-width: 0;
+}
+
+/* ── Registered routes table ─────────────────────────────────────── */
+.cem-routes-table code {
+	font-size: 12px;
+}
+
+.cem-routes-table td {
+	vertical-align: middle;
+}
+
+.cem-route-system-badge {
+	display: inline-block;
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: #e0e0e0;
+	color: #646970;
+	font-size: 10px;
+	font-weight: 600;
+	margin-left: 4px;
+	text-transform: uppercase;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media screen and (max-width: 960px) {
+	.cem-fields-grid   { grid-template-columns: 1fr; }
+	.cem-field-full    { grid-column: 1; }
+	.cem-schema-fields { grid-template-columns: 1fr; }
+}

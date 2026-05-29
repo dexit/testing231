@@ -1,0 +1,106 @@
+<?php
+/**
+ * DEMO MICROPLUGIN: Twilio Outbound SMS Dispatcher
+ *
+ * Endpoint setup:
+ *   Slug:        dispatch/sms
+ *   Methods:     POST
+ *   Capability:  manage_options  (internal use only — also called via CEM::queue())
+ *   Async:       Yes             (tick the Async checkbox for fire-and-forget dispatch)
+ *
+ * Request params (POST body or queued payload):
+ *   to      (string) — E.164 phone number e.g. +447700900001
+ *   message (string) — SMS body text (max 1600 chars)
+ *   context (array)  — optional metadata logged with result
+ *
+ * WP options used:
+ *   cem_twilio_account_sid — Twilio Account SID
+ *   cem_twilio_auth_token  — Twilio Auth Token
+ *   cem_twilio_from_number — Your Twilio phone number (E.164)
+ *
+ * What this does:
+ *  1. Validates params
+ *  2. Sends SMS via Twilio Messages API (wp_remote_post via CEM::http_post)
+ *  3. Stores result to transient (keyed by To + timestamp)
+ *  4. Returns send result or error
+ *
+ * Replace 105 with the actual Post ID of this Microplugin.
+ */
+function cem_microplugin_callback_105( WP_REST_Request $request ) {
+    // ── Credentials ──────────────────────────────────────────────────────────
+    $account_sid = CEM::option( 'cem_twilio_account_sid' );
+    $auth_token  = CEM::option( 'cem_twilio_auth_token' );
+    $from        = CEM::option( 'cem_twilio_from_number' );
+
+    if ( ! $account_sid || ! $auth_token || ! $from ) {
+        return CEM::error( 'missing_credentials', 'Twilio credentials not configured. Set cem_twilio_account_sid, cem_twilio_auth_token, cem_twilio_from_number in WP options.', 500 );
+    }
+
+    // ── Params ───────────────────────────────────────────────────────────────
+    $to      = sanitize_text_field( CEM::param( 'to', '' ) );
+    $message = sanitize_textarea_field( CEM::param( 'message', '' ) );
+    $context = CEM::param( 'context', array() );
+
+    if ( ! Lib::validate_url( "tel:{$to}" ) && ! preg_match( '/^\+[1-9]\d{7,14}$/', $to ) ) {
+        return CEM::error( 'invalid_to', 'Parameter "to" must be a valid E.164 phone number (e.g. +447700900001).', 400 );
+    }
+    if ( empty( $message ) ) {
+        return CEM::error( 'missing_message', 'Parameter "message" is required.', 400 );
+    }
+
+    $message = Lib::truncate_text( $message, 1600 );
+
+    // ── Send via Twilio Messages API ─────────────────────────────────────────
+    $url  = "https://api.twilio.com/2010-04-01/Accounts/{$account_sid}/Messages.json";
+    $resp = CEM::http_post(
+        $url,
+        array(
+            'To'   => $to,
+            'From' => $from,
+            'Body' => $message,
+        ),
+        array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode( "{$account_sid}:{$auth_token}" ),
+                'Content-Type'  => 'application/x-www-form-urlencoded',
+            ),
+        )
+    );
+
+    $resp_body = json_decode( $resp['body'], true ) ?: array();
+
+    // ── Handle Twilio API response ────────────────────────────────────────────
+    if ( isset( $resp['error'] ) ) {
+        return CEM::error( 'http_error', $resp['error'], 502 );
+    }
+    if ( $resp['status'] < 200 || $resp['status'] >= 300 ) {
+        $twilio_msg = Lib::extract_field( $resp_body, 'message', 'Unknown Twilio error' );
+        $twilio_code = Lib::extract_field( $resp_body, 'code', 0 );
+        return CEM::error(
+            'twilio_error',
+            "Twilio error {$twilio_code}: {$twilio_msg}",
+            502
+        );
+    }
+
+    // ── Store delivery record ─────────────────────────────────────────────────
+    $sms_sid  = Lib::extract_field( $resp_body, 'sid', '' );
+    $record   = array(
+        'sid'        => $sms_sid,
+        'to'         => $to,
+        'from'       => $from,
+        'body'       => $message,
+        'status'     => Lib::extract_field( $resp_body, 'status', 'unknown' ),
+        'sent_at'    => CEM::now(),
+        'context'    => is_array( $context ) ? $context : array(),
+    );
+    CEM::store( 'sent_sms_' . $sms_sid, $record, 90 * DAY_IN_SECONDS );
+
+    return CEM::response( array(
+        'success'     => true,
+        'message_sid' => $sms_sid,
+        'to'          => $to,
+        'status'      => $record['status'],
+        'sent_at'     => $record['sent_at'],
+    ) );
+}
