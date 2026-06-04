@@ -251,8 +251,12 @@ class WRM_Providers {
 			return false;
 		}
 
-		// Build the full URL as Twilio signed it.
-		$url = home_url( $req->get_route() );
+		// Build the full URL as Twilio signed it, using the actual incoming request
+		// URL rather than home_url() to avoid mismatches behind proxies/CDNs.
+		$scheme = ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== $_SERVER['HTTPS'] ) ? 'https' : 'http';
+		$host   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ?? '' ) );
+		$path   = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ?? $req->get_route() ) );
+		$url    = $scheme . '://' . $host . $path;
 
 		// Form params alphabetically sorted, values appended directly.
 		$params = array();

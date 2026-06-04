@@ -94,23 +94,27 @@ class WRM_Router {
 	}
 
 	private static function check_rate_limit( object $route ): bool {
-		$key   = 'wrm_rl_' . md5( $route->slug );
-		$count = (int) get_transient( $key );
+		$key     = 'wrm_rl_' . md5( $route->slug );
+		$win_key = 'wrm_rlw_' . md5( $route->slug );
+		$limit   = (int) $route->rate_limit;
+		$window  = (int) $route->rate_window;
 
-		if ( $count >= (int) $route->rate_limit ) {
+		// Window end stored as its own transient so it works on object-cache installs
+		$win_end = (int) get_transient( $win_key );
+		if ( ! $win_end || $win_end <= time() ) {
+			// New window — reset counter
+			set_transient( $key,     1,               $window );
+			set_transient( $win_key, time() + $window, $window + 5 );
+			return true;
+		}
+
+		$count = (int) get_transient( $key );
+		if ( $count >= $limit ) {
 			return false;
 		}
 
-		if ( 0 === $count ) {
-			set_transient( $key, 1, (int) $route->rate_window );
-		} else {
-			// Increment without resetting TTL
-			$ttl = (int) get_option( '_transient_timeout_' . $key ) - time();
-			if ( $ttl > 0 ) {
-				set_transient( $key, $count + 1, $ttl );
-			}
-		}
-
+		$remaining = $win_end - time();
+		set_transient( $key, $count + 1, max( 1, $remaining ) );
 		return true;
 	}
 
@@ -166,9 +170,19 @@ class WRM_Router {
 		$allowed = array( 'label', 'methods', 'provider', 'auth_token', 'rate_limit', 'rate_window', 'run_mode', 'mapping_id', 'status' );
 		$update  = array();
 		foreach ( $allowed as $key ) {
-			if ( array_key_exists( $key, $data ) ) {
-				$update[ $key ] = $data[ $key ];
-			}
+			if ( ! array_key_exists( $key, $data ) ) continue;
+			$update[ $key ] = match ( $key ) {
+				'label'       => sanitize_text_field( $data[ $key ] ),
+				'methods'     => strtoupper( sanitize_text_field( $data[ $key ] ) ),
+				'provider'    => sanitize_key( $data[ $key ] ),
+				'auth_token'  => sanitize_text_field( $data[ $key ] ),
+				'rate_limit'  => (int) $data[ $key ],
+				'rate_window' => (int) $data[ $key ],
+				'run_mode'    => in_array( $data[ $key ], array( 'sync', 'async' ), true ) ? $data[ $key ] : 'async',
+				'mapping_id'  => (int) $data[ $key ],
+				'status'      => in_array( $data[ $key ], array( 'active', 'paused' ), true ) ? $data[ $key ] : 'active',
+				default       => sanitize_text_field( $data[ $key ] ),
+			};
 		}
 		if ( empty( $update ) ) {
 			return false;

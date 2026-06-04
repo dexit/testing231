@@ -29,7 +29,34 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Security note for integrators:
+ *
+ * Before using chain type "function", call:
+ *   WRM_Mapper::register_callback( 'my_fn' );
+ * on the `plugins_loaded` hook to opt the function into the allowlist.
+ *
+ * Before using chain type "action", call:
+ *   WRM_Mapper::register_hook( 'my_hook' );
+ * on the `plugins_loaded` hook to opt the hook into the allowlist.
+ *
+ * Unregistered callbacks and hooks will be blocked and a warning logged.
+ */
 class WRM_Mapper {
+
+	/** @var array<string,true> Allowlist of callable function names permitted in "function" chains. */
+	private static array $allowed_callbacks = [];
+
+	public static function register_callback( string $fn ): void {
+		self::$allowed_callbacks[ $fn ] = true;
+	}
+
+	/** @var array<string,true> Allowlist of action hook names permitted in "action" chains. */
+	private static array $allowed_hooks = [];
+
+	public static function register_hook( string $hook ): void {
+		self::$allowed_hooks[ $hook ] = true;
+	}
 
 	public static function apply( int $capture_id, int $mapping_id ): array {
 		WRM_Logger::info( 'mapper', 'Applying mapping', array( 'capture_id' => $capture_id, 'mapping_id' => $mapping_id, 'ref_id' => $capture_id ) );
@@ -66,6 +93,7 @@ class WRM_Mapper {
 		if ( ! is_array( $payload ) ) {
 			$payload = array();
 		}
+		$payload = apply_filters( 'wrm_normalize_payload', $payload, $capture_id, $mapping_id );
 
 		$context = array(
 			'payload' => $payload,
@@ -182,8 +210,15 @@ class WRM_Mapper {
 			return $posts ? (int) $posts[0] : 0;
 		}
 		if ( 'post_title' === $field ) {
-			$p = get_page_by_title( sanitize_text_field( (string) $value ), OBJECT, $cpt );
-			return $p ? (int) $p->ID : 0;
+			$posts = get_posts( array(
+				'post_type'      => $cpt,
+				'title'          => sanitize_text_field( (string) $value ),
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'post_status'    => 'any',
+				'no_found_rows'  => true,
+			) );
+			return $posts ? (int) $posts[0] : 0;
 		}
 		return 0;
 	}
@@ -197,16 +232,18 @@ class WRM_Mapper {
 
 			case 'action':
 				$hook = sanitize_text_field( $chain['hook'] ?? '' );
-				if ( ! $hook ) {
-					return array( 'type' => 'action', 'status' => 'skipped', 'reason' => 'no_hook' );
+				if ( ! $hook || ! isset( self::$allowed_hooks[ $hook ] ) ) {
+					WRM_Logger::warning( 'mapper', 'Blocked unregistered hook', array( 'hook' => $hook ) );
+					return array( 'type' => 'action', 'status' => 'skipped', 'reason' => 'not_registered', 'hook' => $hook );
 				}
 				do_action( $hook, $post_id, $payload, $context );
 				return array( 'type' => 'action', 'hook' => $hook, 'status' => 'fired' );
 
 			case 'function':
 				$fn = sanitize_text_field( $chain['function'] ?? '' );
-				if ( ! $fn || ! function_exists( $fn ) ) {
-					return array( 'type' => 'function', 'status' => 'skipped', 'reason' => 'not_found', 'function' => $fn );
+				if ( ! $fn || ! function_exists( $fn ) || ! isset( self::$allowed_callbacks[ $fn ] ) ) {
+					WRM_Logger::warning( 'mapper', 'Blocked unregistered callback', array( 'function' => $fn ) );
+					return array( 'type' => 'function', 'status' => 'skipped', 'reason' => 'not_registered', 'function' => $fn );
 				}
 				try {
 					$fn_result = call_user_func( $fn, $post_id, $payload, $context );
@@ -229,12 +266,50 @@ class WRM_Mapper {
 		}
 	}
 
+	/**
+	 * Validate a webhook URL against SSRF risks.
+	 *
+	 * Rejects URLs that do not pass wp_http_validate_url, have no resolvable host,
+	 * or resolve to a private/reserved IP range.
+	 * Operators may override via the `wrm_webhook_url_allowed` filter.
+	 *
+	 * @param string $url URL to validate.
+	 * @return bool True if the URL is safe to request.
+	 */
+	private static function is_safe_url( string $url ): bool {
+		if ( ! wp_http_validate_url( $url ) ) {
+			return false;
+		}
+		$host = (string) parse_url( $url, PHP_URL_HOST );
+		if ( ! $host ) {
+			return false;
+		}
+		// Block if host resolves to private/reserved IP
+		$ip = gethostbyname( $host );
+		if ( $ip === $host && ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return false; // DNS lookup failed
+		}
+		if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			if (
+				filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) === false
+			) {
+				return false; // Private/reserved range
+			}
+		}
+		return true;
+	}
+
 	private static function chain_webhook( array $chain, int $post_id, array $payload, array $context ): array {
 		$url    = WRM_Merge_Tags::resolve( esc_url_raw( $chain['url'] ?? '' ), $context );
 		$method = strtoupper( sanitize_text_field( $chain['method'] ?? 'POST' ) );
 
 		if ( ! $url ) {
 			return array( 'type' => 'webhook', 'status' => 'skipped', 'reason' => 'no_url' );
+		}
+
+		if ( ! apply_filters( 'wrm_webhook_url_allowed', self::is_safe_url( $url ), $url, $chain ) ) {
+			WRM_Logger::warning( 'mapper', 'Blocked unsafe webhook URL', array( 'url' => $url ) );
+			return array( 'type' => 'webhook', 'status' => 'skipped', 'reason' => 'unsafe_url', 'url' => $url );
 		}
 
 		// Body resolution priority: body_builder > body_template > raw payload
@@ -249,6 +324,9 @@ class WRM_Mapper {
 		}
 
 		$extra_headers = is_array( $chain['headers'] ?? null ) ? $chain['headers'] : array();
+
+		$body          = apply_filters( 'wrm_webhook_chain_body', $body, $chain, $post_id, $payload );
+		$extra_headers = apply_filters( 'wrm_webhook_chain_headers', $extra_headers, $chain, $post_id );
 
 		WRM_Logger::debug( 'mapper', 'Firing webhook chain', array( 'url' => $url, 'method' => $method ) );
 
