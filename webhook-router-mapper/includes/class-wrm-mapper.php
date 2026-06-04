@@ -328,13 +328,20 @@ class WRM_Mapper {
 		$body          = apply_filters( 'wrm_webhook_chain_body', $body, $chain, $post_id, $payload );
 		$extra_headers = apply_filters( 'wrm_webhook_chain_headers', $extra_headers, $chain, $post_id );
 
+		$body_json = wp_json_encode( $body );
+
+		// Outbound HMAC signing — adds X-WRM-Signature: sha256=<hex> when signing_secret configured.
+		if ( ! empty( $chain['signing_secret'] ) ) {
+			$extra_headers['X-WRM-Signature'] = 'sha256=' . hash_hmac( 'sha256', (string) $body_json, $chain['signing_secret'] );
+		}
+
 		WRM_Logger::debug( 'mapper', 'Firing webhook chain', array( 'url' => $url, 'method' => $method ) );
 
 		$response = wp_remote_request(
 			$url,
 			array(
 				'method'  => $method,
-				'body'    => wp_json_encode( $body ),
+				'body'    => $body_json,
 				'headers' => array_merge( array( 'Content-Type' => 'application/json' ), $extra_headers ),
 				'timeout' => (int) ( $chain['timeout'] ?? 15 ),
 			)

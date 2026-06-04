@@ -274,21 +274,69 @@ class WRM_Providers {
 	}
 
 	/**
-	 * Verify a HubSpot v1 signature (SHA-256 of secret + raw body).
+	 * Verify a HubSpot signature.
+	 *
+	 * Supports v3 (preferred, with replay protection) and falls back to v1.
+	 *
+	 * v3: HMAC-SHA256(secret, METHOD + URI + body + timestamp), header X-HubSpot-Signature-v3,
+	 *     timestamp in X-HubSpot-Signature-Timestamp, reject if >300 seconds old.
+	 * v1: SHA-256(secret + body), header X-HubSpot-Signature.
 	 *
 	 * @param WP_REST_Request $req    Incoming request.
 	 * @param string          $secret HubSpot client secret.
 	 * @return bool
 	 */
 	private static function verify_hubspot( WP_REST_Request $req, string $secret ): bool {
+		// v3 path — preferred
+		$sig_v3 = $req->get_header( 'x-hubspot-signature-v3' );
+		if ( $sig_v3 ) {
+			return self::verify_hubspot_v3( $req, $secret, $sig_v3 );
+		}
+
+		// v1 fallback
 		$signature = $req->get_header( 'x-hubspot-signature' );
 		if ( ! $signature ) {
 			return false;
 		}
 
 		$expected = hash( 'sha256', $secret . $req->get_body() );
-
 		return hash_equals( $expected, $signature );
+	}
+
+	/**
+	 * Verify HubSpot v3 signature with replay-attack protection.
+	 *
+	 * Signed string: client_secret + HTTP_METHOD + full_request_URI + request_body + unix_timestamp_ms
+	 * Rejects requests whose timestamp is more than 300 seconds (5 min) old.
+	 *
+	 * @param WP_REST_Request $req    Incoming request.
+	 * @param string          $secret HubSpot client secret.
+	 * @param string          $sig    Raw value of X-HubSpot-Signature-v3 header.
+	 * @return bool
+	 */
+	private static function verify_hubspot_v3( WP_REST_Request $req, string $secret, string $sig ): bool {
+		$timestamp_ms = (string) ( $req->get_header( 'x-hubspot-signature-timestamp' ) ?? '' );
+		if ( ! $timestamp_ms || ! ctype_digit( $timestamp_ms ) ) {
+			WRM_Logger::warning( 'provider', 'HubSpot v3: missing or invalid timestamp header' );
+			return false;
+		}
+
+		// Replay-attack protection: reject if timestamp is >5 minutes old
+		$age_seconds = (int) ( ( (int) round( microtime( true ) * 1000 ) - (int) $timestamp_ms ) / 1000 );
+		if ( $age_seconds > 300 ) {
+			WRM_Logger::warning( 'provider', 'HubSpot v3: timestamp too old', array( 'age_seconds' => $age_seconds ) );
+			return false;
+		}
+
+		$scheme = ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== $_SERVER['HTTPS'] ) ? 'https' : 'http';
+		$host   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ?? '' ) );
+		$path   = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ?? $req->get_route() ) );
+		$uri    = $scheme . '://' . $host . $path;
+
+		$signed = $secret . strtoupper( $req->get_method() ) . $uri . $req->get_body() . $timestamp_ms;
+		$expected = hash_hmac( 'sha256', $signed, $secret );
+
+		return hash_equals( $expected, $sig );
 	}
 
 	/**
