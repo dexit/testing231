@@ -112,7 +112,11 @@ class Custom_Endpoints_Manager_REST_Controller {
 		}
 
 		foreach ( $custom_endpoints as $endpoint ) {
-			if ( empty( $endpoint['slug'] ) || empty( $endpoint['methods'] ) || empty( $endpoint['microplugin_id'] ) ) {
+			if ( empty( $endpoint['slug'] ) || empty( $endpoint['methods'] ) ) {
+				continue;
+			}
+			$is_function_mode = isset( $endpoint['callback_mode'] ) && 'function' === $endpoint['callback_mode'];
+			if ( ! $is_function_mode && empty( $endpoint['microplugin_id'] ) ) {
 				continue;
 			}
 
@@ -251,6 +255,11 @@ class Custom_Endpoints_Manager_REST_Controller {
 
 			CEM_Execution_Logger::log_sync( $endpoint_slug, $request->get_method(), $payload, $response_data, $ms );
 
+			// Fire outgoing webhooks (non-blocking).
+			if ( ! empty( $target_endpoint['outgoing'] ) ) {
+				$this->fire_outgoing_webhooks( $target_endpoint['outgoing'], $payload );
+			}
+
 			if ( $response_data instanceof WP_REST_Response ) {
 				return $response_data;
 			}
@@ -368,11 +377,81 @@ class Custom_Endpoints_Manager_REST_Controller {
 			}
 		}
 
-		if ( ! $target_endpoint || empty( $target_endpoint['capability'] ) ) {
+		if ( ! $target_endpoint ) {
 			return false;
 		}
 
-		return current_user_can( sanitize_text_field( $target_endpoint['capability'] ) );
+		$cap = ! empty( $target_endpoint['capability'] ) ? sanitize_text_field( $target_endpoint['capability'] ) : 'read';
+
+		if ( 'public' === $cap || 'none' === $cap ) {
+			return true;
+		}
+
+		return current_user_can( $cap );
+	}
+
+	/**
+	 * Fire outgoing webhooks for an endpoint (non-blocking).
+	 *
+	 * @since 1.0.0
+	 * @param array $webhooks Array of webhook configs (method, url, body_template).
+	 * @param array $payload  The request payload (query/body/json keys).
+	 */
+	private function fire_outgoing_webhooks( array $webhooks, array $payload ): void {
+		foreach ( $webhooks as $wh ) {
+			$url = isset( $wh['url'] ) ? esc_url_raw( $wh['url'] ) : '';
+			if ( ! $url ) {
+				continue;
+			}
+			$template = isset( $wh['body_template'] ) ? $wh['body_template'] : '';
+			$body     = $this->expand_template( $template, $payload );
+			if ( ! $body ) {
+				$body = wp_json_encode( $payload );
+			}
+			$method = isset( $wh['method'] ) ? strtoupper( sanitize_text_field( $wh['method'] ) ) : 'POST';
+			wp_remote_request(
+				$url,
+				array(
+					'method'   => $method,
+					'body'     => $body,
+					'headers'  => array( 'Content-Type' => 'application/json' ),
+					'timeout'  => 5,
+					'blocking' => false,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Expand {{path.to.key}} placeholders in a body template.
+	 *
+	 * @since 1.0.0
+	 * @param string $template The body template string.
+	 * @param array  $data     Payload data (query/body/json).
+	 * @return string
+	 */
+	private function expand_template( string $template, array $data ): string {
+		if ( empty( $template ) ) {
+			return '';
+		}
+		return preg_replace_callback(
+			'/\{\{([^}]+)\}\}/',
+			function ( $matches ) use ( $data ) {
+				$path  = trim( $matches[1] );
+				$parts = explode( '.', $path );
+				$value = $data;
+				$plen  = count( $parts );
+				for ( $p = 0; $p < $plen; $p++ ) {
+					if ( is_array( $value ) && array_key_exists( $parts[ $p ], $value ) ) {
+						$value = $value[ $parts[ $p ] ];
+					} else {
+						return '';
+					}
+				}
+				return is_scalar( $value ) ? (string) $value : (string) wp_json_encode( $value );
+			},
+			$template
+		);
 	}
 
 	/**
