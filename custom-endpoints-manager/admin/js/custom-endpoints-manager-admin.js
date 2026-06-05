@@ -350,10 +350,10 @@
 			toggleBtn.addEventListener(
 				'click',
 				function () {
-					var isHidden = 'none' === bodyArea.style.display || '' === bodyArea.style.display && getComputedStyle( bodyArea ).display === 'none';
-					bodyArea.style.display = isHidden ? '' : 'none';
+					var isHidden = 'none' === bodyArea.style.display;
+					bodyArea.style.display = isHidden ? 'block' : 'none';
 					if ( bodyHint ) {
-						bodyHint.style.display = isHidden ? '' : 'none';
+						bodyHint.style.display = isHidden ? 'block' : 'none';
 					}
 					toggleBtn.innerHTML = isHidden ? 'Body &#9650;' : 'Body &#9660;';
 				}
@@ -382,7 +382,7 @@
 			'<button type="button" class="cem-wh-toggle-body button button-small">Body &#9660;</button>',
 			'<button type="button" class="cem-wh-remove button-link" title="Remove webhook">&#x2715;</button>',
 			'<textarea name="' + base + '[body_template]" class="cem-wh-body" rows="3"',
-			'  placeholder=\'{"key": "{{body.field}}", "id": "{{query.id"}}"\' style="display:none"></textarea>',
+			'  placeholder=\'{"key": "{{body.field}}", "id": "{{query.id}}"}\' style="display:none"></textarea>',
 			'<p class="cem-wh-body-hint description" style="display:none">',
 			'  Use {{body.field}}, {{query.param}}, {{json.key}} placeholders. Leave blank to forward the full payload.',
 			'</p>'

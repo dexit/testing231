@@ -114,7 +114,7 @@
 
 /* Card body */
 .cem-card-body {
-	padding: 16px 14px 14px;
+	padding: 14px 14px 0;
 	border-top: 1px solid #f0f0f1;
 }
 
@@ -125,7 +125,8 @@
 .cem-fields-grid {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: 14px 20px;
+	gap: 12px 20px;
+	padding-bottom: 4px;
 }
 
 .cem-field-full { grid-column: 1 / -1; }
@@ -339,60 +340,13 @@
 
 .cem-empty-state p { font-size: 14px; margin-bottom: 16px; }
 
-/* ── Card sections (Arguments / Schema / Async) ──────────────────── */
-.cem-primary-fields {
-	padding: 16px 14px 12px;
-}
 
-.cem-card-section {
-	border-top: 1px solid #f0f0f1;
-}
-
-.cem-section-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 9px 14px;
-	background: none;
-	border: none;
-	cursor: pointer;
-	text-align: left;
-	color: #3c434a;
-	font-size: 13px;
-}
-
-.cem-section-head:hover { background: #f9f9f9; }
-
-.cem-section-icon {
-	display: inline-block;
-	font-size: 10px;
-	color: #8c8f94;
-	transition: transform .15s;
-	width: 10px;
-	flex-shrink: 0;
-}
-
-.cem-card-section:not(.cem-section-collapsed) .cem-section-icon {
-	transform: rotate(90deg);
-}
-
-.cem-section-title {
-	font-weight: 600;
-	font-size: 12px;
-}
-
+/* ── Section hints ───────────────────────────────────────────────── */
 .cem-section-hint {
 	color: #8c8f94;
 	font-size: 11px;
 	font-weight: 400;
 }
-
-.cem-section-body {
-	padding: 12px 14px 14px;
-}
-
-.cem-card-section.cem-section-collapsed .cem-section-body { display: none; }
 
 /* ── Callback mode tabs ──────────────────────────────────────────── */
 .cem-callback-label-row {
@@ -586,18 +540,6 @@
 	font-size: 10px;
 	font-weight: 700;
 	letter-spacing: .04em;
-}
-
-/* ── Flat card body layout ───────────────────────────────────────── */
-.cem-card-body {
-	padding: 14px 14px 0;
-}
-
-.cem-fields-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 12px 20px;
-	padding-bottom: 4px;
 }
 
 /* ── Card subsections (Args / Outgoing Actions) ──────────────────── */

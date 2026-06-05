@@ -138,8 +138,9 @@ foreach ( $custom_endpoints as $ep ) {
 				$ep_cb_mode = $ep_data ? ( isset( $ep_data['callback_mode'] ) ? $ep_data['callback_mode'] : 'microplugin' ) : '';
 				$ep_cb_fn   = $ep_data ? ( isset( $ep_data['callback_fn'] ) ? $ep_data['callback_fn'] : '' ) : '';
 
-				$has_get  = in_array( 'GET', $route_methods, true );
-				$test_url = $has_get ? get_rest_url( null, 'cem/v1/' . $route_slug ) . '?_wpnonce=' . $test_nonce : '';
+				$has_get     = in_array( 'GET', $route_methods, true );
+				$has_pattern = false !== strpos( $route_slug, '(' );
+				$test_url    = ( $has_get && ! $has_pattern ) ? get_rest_url( null, 'cem/v1/' . $route_slug ) . '?_wpnonce=' . $test_nonce : '';
 			?>
 			<tr>
 				<td>
