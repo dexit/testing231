@@ -83,16 +83,15 @@ class WRM_Mapper {
 		}
 
 		$raw_config = get_post_meta( $mapping_id, 'wrm_config', true );
-		$config     = json_decode( $raw_config ?: '{}', true );
-		if ( ! is_array( $config ) ) {
+		if ( $raw_config && ! json_validate( $raw_config ) ) {
 			WRM_Logger::error( 'mapper', 'Mapping config invalid JSON', array( 'mapping_id' => $mapping_id ) );
 			return array( 'success' => false, 'error' => 'mapping_config_invalid' );
 		}
+		$config = json_decode( $raw_config ?: '{}', true ) ?? array();
 
-		$payload = json_decode( $capture['payload'], true );
-		if ( ! is_array( $payload ) ) {
-			$payload = array();
-		}
+		$payload = json_validate( $capture['payload'] )
+			? ( json_decode( $capture['payload'], true ) ?? array() )
+			: array();
 		$payload = apply_filters( 'wrm_normalize_payload', $payload, $capture_id, $mapping_id );
 
 		$context = array(
@@ -317,8 +316,9 @@ class WRM_Mapper {
 			$body = self::render_body_builder( $chain['body_builder'], $payload, $context );
 		} elseif ( ! empty( $chain['body_template'] ) ) {
 			$rendered = WRM_Merge_Tags::resolve( (string) $chain['body_template'], $context );
-			$decoded  = json_decode( $rendered, true );
-			$body     = is_array( $decoded ) ? $decoded : array_merge( $payload, array( '_wrm_post_id' => $post_id ) );
+			$body     = ( json_validate( $rendered ) && is_array( $decoded = json_decode( $rendered, true ) ) )
+				? $decoded
+				: array_merge( $payload, array( '_wrm_post_id' => $post_id ) );
 		} else {
 			$body = array_merge( $payload, array( '_wrm_post_id' => $post_id ) );
 		}

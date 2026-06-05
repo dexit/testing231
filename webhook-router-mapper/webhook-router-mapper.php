@@ -4,8 +4,8 @@
  * Plugin URI:        https://example.com/webhook-router-mapper
  * Description:       Register dynamic REST webhook endpoints, normalize multi-provider payloads (Twilio, HubSpot, WhatsApp, custom), map to CPT/meta/taxonomy via visual builder, chain actions, and async queue with rate-limiting and retry.
  * Version:           1.0.0
- * Requires at least: 6.0
- * Requires PHP:      8.1
+ * Requires at least: 7.0
+ * Requires PHP:      8.3
  * Author:            OWL
  * License:           GPL v2 or later
  * Text Domain:       wrm

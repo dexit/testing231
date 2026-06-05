@@ -149,7 +149,9 @@ class WRM_Providers {
 	 */
 	private static function normalize_hubspot( WP_REST_Request $req ): array {
 		$raw_body = $req->get_body();
-		$events   = json_decode( $raw_body, true );
+		$events   = ( $raw_body && json_validate( $raw_body ) )
+			? ( json_decode( $raw_body, true ) ?? array() )
+			: array();
 
 		if ( ! is_array( $events ) ) {
 			$events = array();
@@ -178,7 +180,9 @@ class WRM_Providers {
 	 */
 	private static function normalize_whatsapp( WP_REST_Request $req ): array {
 		$raw_body = $req->get_body();
-		$data     = json_decode( $raw_body, true );
+		$data     = ( $raw_body && json_validate( $raw_body ) )
+			? ( json_decode( $raw_body, true ) ?? array() )
+			: array();
 
 		if ( ! is_array( $data ) ) {
 			$data = array();

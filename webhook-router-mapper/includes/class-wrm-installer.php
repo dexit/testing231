@@ -12,9 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Installer {
 
-	const ROUTES_TABLE   = 'wrm_routes';
-	const CAPTURES_TABLE = 'wrm_captures';
-	const JOBS_TABLE     = 'wrm_jobs';
+	const string ROUTES_TABLE   = 'wrm_routes';
+	const string CAPTURES_TABLE = 'wrm_captures';
+	const string JOBS_TABLE     = 'wrm_jobs';
 
 	public static function install(): void {
 		global $wpdb;

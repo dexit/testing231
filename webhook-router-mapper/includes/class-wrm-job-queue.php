@@ -18,9 +18,9 @@ class WRM_Job_Queue {
 	// Constants
 	// -------------------------------------------------------------------------
 
-	const BATCH_SIZE   = 5;
-	const MAX_ATTEMPTS = 3;
-	const RETRY_DELAYS = array( 2, 10, 30 ); // minutes per attempt (0-indexed)
+	const int   BATCH_SIZE   = 5;
+	const int   MAX_ATTEMPTS = 3;
+	const array RETRY_DELAYS = array( 2, 10, 30 ); // minutes per attempt (0-indexed)
 
 	// -------------------------------------------------------------------------
 	// Bootstrap

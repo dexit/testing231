@@ -14,15 +14,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Logger {
 
-	const TABLE    = 'wrm_logs';
-	const MAX_ROWS = 5000;
+	const string TABLE    = 'wrm_logs';
+	const int    MAX_ROWS = 5000;
 
 	// Severity levels (ascending)
-	const DEBUG     = 'debug';
-	const INFO      = 'info';
-	const WARNING   = 'warning';
-	const ERROR     = 'error';
-	const EXCEPTION = 'exception';
+	const string DEBUG     = 'debug';
+	const string INFO      = 'info';
+	const string WARNING   = 'warning';
+	const string ERROR     = 'error';
+	const string EXCEPTION = 'exception';
 
 	// -------------------------------------------------------------------------
 	// Public API

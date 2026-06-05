@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Admin_API {
 
-	const NAMESPACE = 'wrm/v1';
+	const string NAMESPACE = 'wrm/v1';
 
 	// -------------------------------------------------------------------------
 	// Bootstrap
@@ -746,7 +746,9 @@ class WRM_Admin_API {
 		}
 
 		$raw_config = get_post_meta( $post->ID, 'wrm_config', true );
-		$config     = $raw_config ? json_decode( $raw_config, true ) : array();
+		$config     = ( $raw_config && json_validate( $raw_config ) )
+			? ( json_decode( $raw_config, true ) ?? array() )
+			: array();
 
 		$terms    = get_the_terms( $post->ID, 'wrm_provider' );
 		$provider = ( ! empty( $terms ) && ! is_wp_error( $terms ) ) ? $terms[0]->name : '';
