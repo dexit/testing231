@@ -17,6 +17,7 @@ const STATUS_COLORS = {
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
   const [routes, setRoutes] = useState([]);
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -56,12 +57,19 @@ export default function JobsPage() {
       .catch(e => { setError(e.message || 'Failed to load jobs'); setLoading(false); });
   }, [page, filterStatus, filterRoute]);
 
+  const loadStats = useCallback(() => {
+    apiFetch({ path: '/wrm/v1/jobs/stats' })
+      .then(data => setStats(data || {}))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadJobs();
+    loadStats();
     apiFetch({ path: '/wrm/v1/routes' })
       .then(data => setRoutes(Array.isArray(data) ? data : []))
       .catch(() => setRoutes([]));
-  }, [loadJobs]);
+  }, [loadJobs, loadStats]);
 
   // Auto-refresh
   useEffect(() => {
@@ -80,13 +88,13 @@ export default function JobsPage() {
 
   const handleRetry = (jobId) => {
     apiFetch({ path: `/wrm/v1/jobs/${jobId}/retry`, method: 'POST' })
-      .then(() => { showNotice(`Job #${jobId} queued for retry.`); loadJobs(); })
+      .then(() => { showNotice(`Job #${jobId} queued for retry.`); loadJobs(); loadStats(); })
       .catch(e => showNotice(e.message || 'Retry failed', 'error'));
   };
 
   const handleBulkRetry = () => {
     Promise.all(selected.map(id => apiFetch({ path: `/wrm/v1/jobs/${id}/retry`, method: 'POST' })))
-      .then(() => { showNotice(`${selected.length} job(s) queued for retry.`); setSelected([]); loadJobs(); })
+      .then(() => { showNotice(`${selected.length} job(s) queued for retry.`); setSelected([]); loadJobs(); loadStats(); })
       .catch(e => showNotice(e.message || 'Bulk retry failed', 'error'));
   };
 
@@ -103,9 +111,9 @@ export default function JobsPage() {
     }
   };
 
-  // Compute status counts from current job list
+  // Global counts from /jobs/stats endpoint (accurate across all pages)
   const counts = ALL_STATUSES.reduce((acc, s) => {
-    acc[s] = jobs.filter(j => j.status === s).length;
+    acc[s] = stats[s] ?? 0;
     return acc;
   }, {});
 

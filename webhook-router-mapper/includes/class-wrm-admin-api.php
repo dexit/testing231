@@ -207,6 +207,16 @@ class WRM_Admin_API {
 
 		register_rest_route(
 			$ns,
+			'/jobs/stats',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'job_stats' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			'/jobs/(?P<id>\d+)',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -232,14 +242,21 @@ class WRM_Admin_API {
 			$ns,
 			'/logs',
 			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( __CLASS__, 'list_logs' ),
-				'permission_callback' => $cap,
-				'args'                => array(
-					'level'    => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
-					'context'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
-					'per_page' => array( 'type' => 'integer', 'default' => 50 ),
-					'offset'   => array( 'type' => 'integer', 'default' => 0 ),
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( __CLASS__, 'list_logs' ),
+					'permission_callback' => $cap,
+					'args'                => array(
+						'level'    => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+						'context'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+						'per_page' => array( 'type' => 'integer', 'default' => 50 ),
+						'offset'   => array( 'type' => 'integer', 'default' => 0 ),
+					),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( __CLASS__, 'purge_logs' ),
+					'permission_callback' => $cap,
 				),
 			)
 		);
@@ -668,6 +685,29 @@ class WRM_Admin_API {
 		return new WP_REST_Response( array( 'requeued' => true, 'id' => $id ), 200 );
 	}
 
+	/**
+	 * Return global job counts grouped by status — used by the React status-summary cards.
+	 */
+	public static function job_stats(): WP_REST_Response {
+		global $wpdb;
+
+		$table = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			"SELECT status, COUNT(*) AS cnt FROM {$table} GROUP BY status",
+			ARRAY_A
+		) ?? array();
+
+		$counts = array_fill_keys( array( 'queued', 'running', 'done', 'failed', 'dead', 'paused' ), 0 );
+		foreach ( $rows as $row ) {
+			$counts[ $row['status'] ] = (int) $row['cnt'];
+		}
+		$counts['total'] = array_sum( $counts );
+
+		return new WP_REST_Response( $counts, 200 );
+	}
+
 	// -------------------------------------------------------------------------
 	// Log handlers
 	// -------------------------------------------------------------------------
@@ -682,6 +722,12 @@ class WRM_Admin_API {
 
 		$logs = WRM_Logger::get_logs( array_filter( $args, static fn( $v ) => '' !== $v && 0 !== $v ) );
 		return new WP_REST_Response( $logs, 200 );
+	}
+
+	public static function purge_logs(): WP_REST_Response {
+		$deleted = WRM_Logger::purge( 0 );
+		WRM_Logger::info( 'admin', "All logs purged via API ({$deleted} rows).", array( 'ref_id' => 0 ) );
+		return new WP_REST_Response( array( 'purged' => true, 'deleted' => $deleted ), 200 );
 	}
 
 	// -------------------------------------------------------------------------
