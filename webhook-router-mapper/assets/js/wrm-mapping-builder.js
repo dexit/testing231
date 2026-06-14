@@ -19,6 +19,9 @@
 	let _uid = 0;
 	const uid  = ()  => ++_uid;
 	const esc  = (s) => $('<div>').text(String(s ?? '')).html();
+	// Mirror WP sanitize_key(): lowercase, allow a-z0-9_- only. Keeps the saved
+	// config in sync with what the PHP stores so meta_json keys round-trip.
+	const sanitizeKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
 	const i18n = (window.wrmData && window.wrmData.i18n) ? window.wrmData.i18n : {};
 	const t    = (key, fallback) => i18n[key] || fallback;
 
@@ -564,7 +567,9 @@
 
 			function commit () {
 				const tt = $typesel.val();
-				const tk = tt === 'post_field' ? $pfsel.val() : $keyinp.val();
+				// Key-based targets (meta/meta_json/taxonomy) are sanitized server-side
+				// with sanitize_key(); normalize here so the saved config matches storage.
+				const tk = tt === 'post_field' ? $pfsel.val() : sanitizeKey($keyinp.val());
 				field.target = (PREFIX[tt] || '') + tk;
 				_save();
 			}
@@ -576,6 +581,10 @@
 			});
 			$pfsel.on('change',  commit);
 			$keyinp.on('input',  commit);
+			// Reflect the sanitized key back into the field once focus leaves.
+			$keyinp.on('blur', function () {
+				if ($typesel.val() !== 'post_field') { $(this).val(sanitizeKey($(this).val())); }
+			});
 
 			return $wrap.append($typesel).append($pfsel).append($keyinp);
 		}
@@ -740,7 +749,8 @@
 				$keyRow.toggle(chain.chain_source === 'post_meta_json');
 				_save();
 			});
-			$keyInp.on('input', function () { chain.chain_source_key = $(this).val(); _save(); });
+			$keyInp.on('input', function () { chain.chain_source_key = sanitizeKey($(this).val()); _save(); });
+			$keyInp.on('blur', function () { $(this).val(chain.chain_source_key); });
 
 			$body.append(
 				_frow('Target Mapping', $sel, 'Chains the result through another mapping.'),

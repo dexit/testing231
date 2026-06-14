@@ -179,9 +179,11 @@ class WRM_Mapper {
 			wp_set_object_terms( $result_id, is_array( $terms ) ? $terms : array( (string) $terms ), $tax );
 		}
 
-		// Update context with created post for chain merge tags
+		// Update context with created post for chain merge tags.
+		// meta_json values are exposed in decoded (pre-encode) form so merge tags
+		// like {{meta.key}} resolve to the structured value, not the JSON string.
 		$context['post'] = get_post( $result_id );
-		$context['meta'] = $meta_data;
+		$context['meta'] = array_merge( $meta_json_data, $meta_data );
 
 		// Execute action chains
 		$chain_log = array();
@@ -258,7 +260,10 @@ class WRM_Mapper {
 				}
 
 			case 'dispatcher':
-				return self::chain_webhook( $chain, $post_id, $payload, $context );
+				// Semantic alias of webhook; relabel the log entry so it reflects config.
+				$dispatch_result         = self::chain_webhook( $chain, $post_id, $payload, $context );
+				$dispatch_result['type'] = 'dispatcher';
+				return $dispatch_result;
 
 			case 'mapping':
 				$next_id = (int) ( $chain['mapping_id'] ?? 0 );
@@ -268,15 +273,29 @@ class WRM_Mapper {
 				$chain_src = sanitize_key( $chain['chain_source'] ?? 'payload' );
 				$chain_key = sanitize_key( $chain['chain_source_key'] ?? '' );
 				if ( 'post_meta_json' === $chain_src && $chain_key ) {
-					$meta_raw      = get_post_meta( $post_id, $chain_key, true );
-					$chain_payload = ( is_string( $meta_raw ) && json_validate( $meta_raw ) )
-						? ( json_decode( $meta_raw, true ) ?? $payload )
-						: $payload;
+					$meta_raw = get_post_meta( $post_id, $chain_key, true );
+					$decoded  = ( is_string( $meta_raw ) && json_validate( $meta_raw ) )
+						? json_decode( $meta_raw, true )
+						: null;
+					if ( is_array( $decoded ) ) {
+						$chain_payload = $decoded;
+					} else {
+						WRM_Logger::warning(
+							'mapper',
+							'chain_source post_meta_json did not decode to an array; falling back to original payload',
+							array( 'meta_key' => $chain_key, 'post_id' => $post_id )
+						);
+						$chain_payload = $payload;
+					}
 				} else {
 					$chain_payload = $payload;
 				}
 				$syn_capture_id = WRM_Capture::store_internal( '_chain', 'custom', $chain_payload );
-				$chain_result   = self::apply( $syn_capture_id, $next_id );
+				if ( ! $syn_capture_id ) {
+					WRM_Logger::error( 'mapper', 'Failed to store synthetic chain capture', array( 'mapping_id' => $next_id ) );
+					return array( 'type' => 'mapping', 'mapping_id' => $next_id, 'status' => 'skipped', 'reason' => 'capture_store_failed' );
+				}
+				$chain_result = self::apply( $syn_capture_id, $next_id );
 				return array( 'type' => 'mapping', 'mapping_id' => $next_id, 'result' => $chain_result );
 
 			default:
