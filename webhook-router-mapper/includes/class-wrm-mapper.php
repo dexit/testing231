@@ -122,8 +122,9 @@ class WRM_Mapper {
 			'post_type'   => $cpt,
 			'post_status' => sanitize_key( $config['post_status'] ?? 'publish' ),
 		);
-		$meta_data = array();
-		$tax_data  = array();
+		$meta_data      = array();
+		$meta_json_data = array(); // stored JSON-encoded — decodable by chained mappings
+		$tax_data       = array();
 
 		foreach ( $fields as $rule ) {
 			$source = sanitize_text_field( $rule['source'] ?? '' );
@@ -140,7 +141,9 @@ class WRM_Mapper {
 				continue;
 			}
 
-			if ( str_starts_with( $target, 'meta:' ) ) {
+			if ( str_starts_with( $target, 'meta_json:' ) ) {
+				$meta_json_data[ sanitize_key( substr( $target, 10 ) ) ] = $value;
+			} elseif ( str_starts_with( $target, 'meta:' ) ) {
 				$meta_data[ sanitize_key( substr( $target, 5 ) ) ] = $value;
 			} elseif ( str_starts_with( $target, 'taxonomy:' ) ) {
 				$tax_data[ sanitize_key( substr( $target, 9 ) ) ] = $value;
@@ -168,6 +171,9 @@ class WRM_Mapper {
 
 		foreach ( $meta_data as $key => $val ) {
 			update_post_meta( $result_id, $key, $val );
+		}
+		foreach ( $meta_json_data as $key => $val ) {
+			update_post_meta( $result_id, $key, wp_json_encode( $val ) );
 		}
 		foreach ( $tax_data as $tax => $terms ) {
 			wp_set_object_terms( $result_id, is_array( $terms ) ? $terms : array( (string) $terms ), $tax );
@@ -251,12 +257,25 @@ class WRM_Mapper {
 					return array( 'type' => 'function', 'function' => $fn, 'error' => $e->getMessage() );
 				}
 
+			case 'dispatcher':
+				return self::chain_webhook( $chain, $post_id, $payload, $context );
+
 			case 'mapping':
 				$next_id = (int) ( $chain['mapping_id'] ?? 0 );
 				if ( ! $next_id ) {
 					return array( 'type' => 'mapping', 'status' => 'skipped', 'reason' => 'no_mapping_id' );
 				}
-				$syn_capture_id = WRM_Capture::store_internal( '_chain', 'custom', $payload );
+				$chain_src = sanitize_key( $chain['chain_source'] ?? 'payload' );
+				$chain_key = sanitize_key( $chain['chain_source_key'] ?? '' );
+				if ( 'post_meta_json' === $chain_src && $chain_key ) {
+					$meta_raw      = get_post_meta( $post_id, $chain_key, true );
+					$chain_payload = ( is_string( $meta_raw ) && json_validate( $meta_raw ) )
+						? ( json_decode( $meta_raw, true ) ?? $payload )
+						: $payload;
+				} else {
+					$chain_payload = $payload;
+				}
+				$syn_capture_id = WRM_Capture::store_internal( '_chain', 'custom', $chain_payload );
 				$chain_result   = self::apply( $syn_capture_id, $next_id );
 				return array( 'type' => 'mapping', 'mapping_id' => $next_id, 'result' => $chain_result );
 

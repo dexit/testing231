@@ -364,14 +364,14 @@
 	 * Field:
 	 *   { source, target, loop, loop_type, loop_template, loop_join }
 	 *
-	 * Chain (webhook):
-	 *   { type, url, method, timeout, headers{}, body_builder }
+	 * Chain (webhook / dispatcher):
+	 *   { type, url, method, timeout, headers{}, signing_secret, body_builder }
 	 * Chain (action):
 	 *   { type, hook }
 	 * Chain (function):
 	 *   { type, function }
 	 * Chain (mapping):
-	 *   { type, mapping_id }
+	 *   { type, mapping_id, chain_source, chain_source_key }
 	 * ==================================================================== */
 
 	WRM.MappingBuilder = (function () {
@@ -542,13 +542,17 @@
 
 		function _targetSelector (field) {
 			let tType = 'post_field', tKey = field.target || 'post_title';
-			if (tKey.startsWith('meta:'))     { tType = 'meta';     tKey = tKey.slice(5); }
+			if (tKey.startsWith('meta_json:'))  { tType = 'meta_json'; tKey = tKey.slice(10); }
+			else if (tKey.startsWith('meta:'))  { tType = 'meta';      tKey = tKey.slice(5); }
 			else if (tKey.startsWith('taxonomy:')) { tType = 'taxonomy'; tKey = tKey.slice(9); }
+
+			const PREFIX = { post_field: '', meta: 'meta:', meta_json: 'meta_json:', taxonomy: 'taxonomy:' };
 
 			const $wrap    = $('<div class="wrm-target-sel">');
 			const $typesel = $('<select class="wrm-tgt-type">').append(
 				$('<option value="post_field">Post field</option>'),
 				$('<option value="meta">Post meta (meta:key)</option>'),
+				$('<option value="meta_json">Meta JSON (meta_json:key)</option>'),
 				$('<option value="taxonomy">Taxonomy (taxonomy:name)</option>')
 			).val(tType);
 
@@ -561,7 +565,7 @@
 			function commit () {
 				const tt = $typesel.val();
 				const tk = tt === 'post_field' ? $pfsel.val() : $keyinp.val();
-				field.target = tt === 'post_field' ? tk : (tt + ':' + tk);
+				field.target = (PREFIX[tt] || '') + tk;
 				_save();
 			}
 			$typesel.on('change', function () {
@@ -582,8 +586,8 @@
 			_state.chains.forEach((c) => $list.append(_chainItem(c)));
 
 			const $addRow = $('<div class="wrm-add-chain-row">');
-			['webhook', 'action', 'function', 'mapping'].forEach(type => {
-				const icons = { webhook: '🔗', action: '⚡', function: '⚙', mapping: '🗺' };
+			['webhook', 'dispatcher', 'action', 'function', 'mapping'].forEach(type => {
+				const icons = { webhook: '🔗', dispatcher: '📡', action: '⚡', function: '⚙', mapping: '🗺' };
 				$addRow.append(
 					$('<button type="button" class="button wrm-add-chain-btn">').text(icons[type] + ' ' + type)
 						.on('click', function () {
@@ -601,16 +605,17 @@
 		function _newChain (type) {
 			const base = { type, _uid: uid() };
 			const defaults = {
-				webhook:  { url: '', method: 'POST', timeout: 15, headers: {}, body_builder: null },
-				action:   { hook: '' },
-				function: { function: '' },
-				mapping:  { mapping_id: 0 }
+				webhook:    { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
+				dispatcher: { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
+				action:     { hook: '' },
+				function:   { function: '' },
+				mapping:    { mapping_id: 0, chain_source: 'payload', chain_source_key: '' }
 			};
 			return Object.assign(base, defaults[type] || {});
 		}
 
 		function _chainItem (chain) {
-			const icons = { webhook: '🔗', action: '⚡', function: '⚙', mapping: '🗺' };
+			const icons = { webhook: '🔗', dispatcher: '📡', action: '⚡', function: '⚙', mapping: '🗺' };
 			const $item = $('<div class="wrm-chain-item">').attr('data-uid', chain._uid);
 
 			const $hdr = $('<div class="wrm-chain-hdr">').append(
@@ -629,7 +634,7 @@
 			);
 
 			const $body = $('<div class="wrm-chain-body">');
-			const renderers = { webhook: _chainWebhook, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
+			const renderers = { webhook: _chainWebhook, dispatcher: _chainWebhook, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
 			(renderers[chain.type] || (() => $('<p>Unknown type</p>')))(chain, $body);
 
 			return $item.append($hdr).append($body);
@@ -647,6 +652,10 @@
 				),
 				_frow('Timeout (s)',
 					$('<input type="number" min="1" max="60" class="small-text">').val(chain.timeout || 15).on('input', function () { chain.timeout = parseInt($(this).val(), 10) || 15; _save(); })
+				),
+				_frow('Signing Secret',
+					$('<input type="text" class="widefat" placeholder="Leave blank to skip outbound HMAC signing">').val(chain.signing_secret || '').on('input', function () { chain.signing_secret = $(this).val(); _save(); }),
+					'When set, adds <code>X-WRM-Signature: sha256=&lt;hmac&gt;</code> to the request.'
 				)
 			);
 
@@ -718,7 +727,26 @@
 					maps.forEach(m => $sel.append($('<option>').val(m.id).text(m.title).prop('selected', parseInt(m.id) === chain.mapping_id)));
 				}).catch(() => {});
 			$sel.on('change', function () { chain.mapping_id = parseInt($(this).val(), 10); _save(); });
-			$body.append(_frow('Target Mapping', $sel, 'Chains the output payload through another mapping.'));
+
+			const $srcSel = $('<select class="widefat">').append(
+				$('<option value="payload">Original payload</option>'),
+				$('<option value="post_meta_json">Decode JSON from post meta</option>')
+			).val(chain.chain_source || 'payload');
+			const $keyInp = $('<input type="text" class="widefat" placeholder="meta key containing JSON">').val(chain.chain_source_key || '');
+			const $keyRow = _frow('Meta key', $keyInp, 'The post meta key written by a <code>meta_json:</code> target — its JSON value becomes the chained payload.');
+			$keyRow.toggle((chain.chain_source || 'payload') === 'post_meta_json');
+			$srcSel.on('change', function () {
+				chain.chain_source = $(this).val();
+				$keyRow.toggle(chain.chain_source === 'post_meta_json');
+				_save();
+			});
+			$keyInp.on('input', function () { chain.chain_source_key = $(this).val(); _save(); });
+
+			$body.append(
+				_frow('Target Mapping', $sel, 'Chains the result through another mapping.'),
+				_frow('Chain Source', $srcSel, 'What payload to pass into the chained mapping.'),
+				$keyRow
+			);
 		}
 
 		/* ---- TAGS PANEL -------------------------------------------------- */
