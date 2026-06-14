@@ -1,0 +1,19 @@
+{
+  "_name": "Flow B (step 1) — Order Inbox",
+  "_description": "Payload -> CPT 'order_raw'. Stores the whole 'order' object JSON-encoded in meta_json:payload, then chains to the normalizer mapping reading that decoded JSON as its payload. Set mapping_id to the post ID of flow-b2.",
+  "cpt": "order_raw",
+  "post_status": "private",
+  "update_existing": false,
+  "fields": [
+    { "source": "order.id", "target": "post_title" },
+    { "source": "order",     "target": "meta_json:payload" }
+  ],
+  "chains": [
+    {
+      "type": "mapping",
+      "mapping_id": 0,
+      "chain_source": "post_meta_json",
+      "chain_source_key": "payload"
+    }
+  ]
+}
