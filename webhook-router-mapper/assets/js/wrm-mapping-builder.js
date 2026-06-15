@@ -369,6 +369,10 @@
 	 *
 	 * Chain (webhook / dispatcher):
 	 *   { type, url, method, timeout, headers{}, signing_secret, body_builder }
+	 * Chain (email):
+	 *   { type, to, subject, body_template, cc, bcc, html }
+	 * Chain (sms):
+	 *   { type, provider, to, from, body, account_sid, auth_token }
 	 * Chain (action):
 	 *   { type, hook }
 	 * Chain (function):
@@ -595,8 +599,8 @@
 			_state.chains.forEach((c) => $list.append(_chainItem(c)));
 
 			const $addRow = $('<div class="wrm-add-chain-row">');
-			['webhook', 'dispatcher', 'action', 'function', 'mapping'].forEach(type => {
-				const icons = { webhook: '🔗', dispatcher: '📡', action: '⚡', function: '⚙', mapping: '🗺' };
+			['webhook', 'dispatcher', 'email', 'sms', 'action', 'function', 'mapping'].forEach(type => {
+				const icons = { webhook: '🔗', dispatcher: '📡', email: '✉', sms: '💬', action: '⚡', function: '⚙', mapping: '🗺' };
 				$addRow.append(
 					$('<button type="button" class="button wrm-add-chain-btn">').text(icons[type] + ' ' + type)
 						.on('click', function () {
@@ -616,6 +620,8 @@
 			const defaults = {
 				webhook:    { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
 				dispatcher: { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
+				email:      { to: '', subject: '', body_template: '', cc: '', bcc: '', html: false },
+				sms:        { provider: 'twilio', to: '', from: '', body: '', account_sid: '', auth_token: '' },
 				action:     { hook: '' },
 				function:   { function: '' },
 				mapping:    { mapping_id: 0, chain_source: 'payload', chain_source_key: '' }
@@ -624,7 +630,7 @@
 		}
 
 		function _chainItem (chain) {
-			const icons = { webhook: '🔗', dispatcher: '📡', action: '⚡', function: '⚙', mapping: '🗺' };
+			const icons = { webhook: '🔗', dispatcher: '📡', email: '✉', sms: '💬', action: '⚡', function: '⚙', mapping: '🗺' };
 			const $item = $('<div class="wrm-chain-item">').attr('data-uid', chain._uid);
 
 			const $hdr = $('<div class="wrm-chain-hdr">').append(
@@ -643,7 +649,7 @@
 			);
 
 			const $body = $('<div class="wrm-chain-body">');
-			const renderers = { webhook: _chainWebhook, dispatcher: _chainWebhook, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
+			const renderers = { webhook: _chainWebhook, dispatcher: _chainWebhook, email: _chainEmail, sms: _chainSms, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
 			(renderers[chain.type] || (() => $('<p>Unknown type</p>')))(chain, $body);
 
 			return $item.append($hdr).append($body);
@@ -713,6 +719,70 @@
 			});
 			$body.append(_frow('Payload Body Builder', $bbContainer,
 				'Visually construct the outgoing JSON payload. Use {{payload.field}} for merge tags. Supports nested objects, static arrays, and loop arrays.'));
+		}
+
+		function _chainEmail (chain, $body) {
+			const tagInput = (label, key, placeholder) => {
+				const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
+				$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
+				const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
+				$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
+				return _frow(label, $('<div class="wrm-input-btn">').append($inp, $tag));
+			};
+			$body.append(
+				tagInput('To', 'to', '{{payload.email}}'),
+				tagInput('Subject', 'subject', 'New submission: {{payload.name}}'),
+				_frow('Body',
+					(function () {
+						const $ta = $('<textarea class="widefat" rows="5" placeholder="Hi {{payload.name}}, ...">').val(chain.body_template || '');
+						$ta.on('input', function () { chain.body_template = $(this).val(); _save(); });
+						return $ta;
+					})(),
+					'Supports merge tags. Tick HTML below to send as text/html.'
+				),
+				tagInput('Cc (optional)', 'cc', ''),
+				tagInput('Bcc (optional)', 'bcc', ''),
+				_frow('HTML email',
+					$('<label class="wrm-toggle">').append(
+						$('<input type="checkbox">').prop('checked', !!chain.html).on('change', function () { chain.html = $(this).is(':checked'); _save(); }),
+						' Send as HTML (Content-Type: text/html)'
+					)
+				)
+			);
+		}
+
+		function _chainSms (chain, $body) {
+			const tagInput = (label, key, placeholder) => {
+				const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
+				$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
+				const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
+				$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
+				return _frow(label, $('<div class="wrm-input-btn">').append($inp, $tag));
+			};
+			$body.append(
+				_frow('Provider',
+					$('<select>').append($('<option value="twilio">Twilio</option>'))
+						.val(chain.provider || 'twilio')
+						.on('change', function () { chain.provider = $(this).val(); _save(); }),
+					'Other gateways: return a value from the <code>wrm_send_sms</code> PHP filter.'
+				),
+				tagInput('To', 'to', '{{payload.phone}}'),
+				tagInput('From', 'from', '+15551234567'),
+				_frow('Message',
+					(function () {
+						const $ta = $('<textarea class="widefat" rows="3" placeholder="Hi {{payload.name}}, your code is ...">').val(chain.body || '');
+						$ta.on('input', function () { chain.body = $(this).val(); _save(); });
+						return $ta;
+					})()
+				),
+				_frow('Twilio Account SID',
+					$('<input type="text" class="widefat" placeholder="ACxxxxxxxx">').val(chain.account_sid || '').on('input', function () { chain.account_sid = $(this).val(); _save(); })
+				),
+				_frow('Twilio Auth Token',
+					$('<input type="password" class="widefat" placeholder="auth token">').val(chain.auth_token || '').on('input', function () { chain.auth_token = $(this).val(); _save(); }),
+					'Stored in the mapping config. Restrict who can edit mappings.'
+				)
+			);
 		}
 
 		function _chainAction (chain, $body) {

@@ -18,7 +18,14 @@ class WRM_Admin {
 	}
 
 	public static function enqueue_shared( string $hook ): void {
-		$wrm_pages = array( 'toplevel_page_wrm-routes', 'webhook-router_page_wrm-captures', 'webhook-router_page_wrm-jobs', 'webhook-router_page_wrm-logs' );
+		$wrm_pages = array(
+			'toplevel_page_wrm-routes',
+			'webhook-router_page_wrm-captures',
+			'webhook-router_page_wrm-jobs',
+			'webhook-router_page_wrm-logs',
+			'webhook-router_page_wrm-schedules',
+			'webhook-router_page_wrm-functions',
+		);
 		if ( ! in_array( $hook, $wrm_pages, true ) ) {
 			return;
 		}
@@ -35,10 +42,12 @@ class WRM_Admin {
 				true
 			);
 			$tab_map = array(
-				'toplevel_page_wrm-routes'         => 'routes',
-				'webhook-router_page_wrm-captures' => 'captures',
-				'webhook-router_page_wrm-jobs'     => 'jobs',
-				'webhook-router_page_wrm-logs'     => 'logs',
+				'toplevel_page_wrm-routes'          => 'routes',
+				'webhook-router_page_wrm-captures'  => 'captures',
+				'webhook-router_page_wrm-jobs'      => 'jobs',
+				'webhook-router_page_wrm-logs'      => 'logs',
+				'webhook-router_page_wrm-schedules' => 'schedules',
+				'webhook-router_page_wrm-functions' => 'functions',
 			);
 			wp_localize_script(
 				'wrm-admin-app',
@@ -66,8 +75,18 @@ class WRM_Admin {
 		add_submenu_page( 'wrm-routes', __( 'Routes', 'wrm' ),   __( 'Routes', 'wrm' ),   'manage_options', 'wrm-routes',   array( __CLASS__, 'page_routes' ) );
 		add_submenu_page( 'wrm-routes', __( 'Mappings', 'wrm' ), __( 'Mappings', 'wrm' ), 'manage_options', 'edit.php?post_type=wrm_mapping' );
 		add_submenu_page( 'wrm-routes', __( 'Captures', 'wrm' ), __( 'Captures', 'wrm' ), 'manage_options', 'wrm-captures', array( __CLASS__, 'page_captures' ) );
-		add_submenu_page( 'wrm-routes', __( 'Jobs', 'wrm' ),     __( 'Jobs', 'wrm' ),     'manage_options', 'wrm-jobs',     array( __CLASS__, 'page_jobs' ) );
-		add_submenu_page( 'wrm-routes', __( 'Logs', 'wrm' ),     __( 'Logs', 'wrm' ),     'manage_options', 'wrm-logs',     array( __CLASS__, 'page_logs' ) );
+		add_submenu_page( 'wrm-routes', __( 'Jobs', 'wrm' ),      __( 'Jobs', 'wrm' ),      'manage_options', 'wrm-jobs',      array( __CLASS__, 'page_jobs' ) );
+		add_submenu_page( 'wrm-routes', __( 'Schedules', 'wrm' ), __( 'Schedules', 'wrm' ), 'manage_options', 'wrm-schedules', array( __CLASS__, 'page_schedules' ) );
+		add_submenu_page( 'wrm-routes', __( 'Functions', 'wrm' ), __( 'Functions', 'wrm' ), 'manage_options', 'wrm-functions', array( __CLASS__, 'page_functions' ) );
+		add_submenu_page( 'wrm-routes', __( 'Logs', 'wrm' ),      __( 'Logs', 'wrm' ),      'manage_options', 'wrm-logs',      array( __CLASS__, 'page_logs' ) );
+	}
+
+	public static function page_schedules(): void {
+		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
+	}
+
+	public static function page_functions(): void {
+		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
 	}
 
 	// -------------------------------------------------------------------------

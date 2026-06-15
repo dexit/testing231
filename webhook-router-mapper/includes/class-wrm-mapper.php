@@ -44,18 +44,106 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class WRM_Mapper {
 
+	/** Option keys for the admin-managed (UI) allowlists. */
+	const string OPT_CALLBACKS = 'wrm_allowed_callbacks';
+	const string OPT_HOOKS     = 'wrm_allowed_hooks';
+
 	/** @var array<string,true> Allowlist of callable function names permitted in "function" chains. */
 	private static array $allowed_callbacks = [];
-
-	public static function register_callback( string $fn ): void {
-		self::$allowed_callbacks[ $fn ] = true;
-	}
 
 	/** @var array<string,true> Allowlist of action hook names permitted in "action" chains. */
 	private static array $allowed_hooks = [];
 
+	/** @var array<string,true> Names registered in code (read-only in the UI). */
+	private static array $code_callbacks = [];
+	private static array $code_hooks     = [];
+
+	/** @var bool Whether persisted allowlists have been merged in. */
+	private static bool $loaded = false;
+
+	public static function register_callback( string $fn ): void {
+		self::$allowed_callbacks[ $fn ] = true;
+		self::$code_callbacks[ $fn ]    = true;
+	}
+
 	public static function register_hook( string $hook ): void {
 		self::$allowed_hooks[ $hook ] = true;
+		self::$code_hooks[ $hook ]    = true;
+	}
+
+	/**
+	 * Merge the admin-managed (option-stored) allowlists into the in-memory
+	 * lists. Runs once, lazily, so it works regardless of hook ordering with
+	 * integrators that call register_callback() / register_hook().
+	 */
+	private static function ensure_loaded(): void {
+		if ( self::$loaded ) {
+			return;
+		}
+		self::$loaded = true;
+
+		// Rebuild the effective allowlist from code-registered names + persisted
+		// options. Rebuilding (rather than appending) means a UI removal takes
+		// effect in the same request once flush_allowlist_cache() is called.
+		self::$allowed_callbacks = self::$code_callbacks;
+		self::$allowed_hooks     = self::$code_hooks;
+
+		foreach ( (array) get_option( self::OPT_CALLBACKS, array() ) as $fn ) {
+			$fn = sanitize_text_field( (string) $fn );
+			if ( '' !== $fn ) {
+				self::$allowed_callbacks[ $fn ] = true;
+			}
+		}
+		foreach ( (array) get_option( self::OPT_HOOKS, array() ) as $hook ) {
+			$hook = sanitize_text_field( (string) $hook );
+			if ( '' !== $hook ) {
+				self::$allowed_hooks[ $hook ] = true;
+			}
+		}
+	}
+
+	/**
+	 * Force ensure_loaded() to re-merge persisted allowlists on next use.
+	 * Called by the admin API after add/remove so changes apply immediately.
+	 */
+	public static function flush_allowlist_cache(): void {
+		self::$loaded = false;
+	}
+
+	/**
+	 * Public SSRF guard so other components (e.g. the scheduler's source_url
+	 * fetch) can reuse the same private/reserved-IP rejection logic.
+	 */
+	public static function is_url_safe( string $url ): bool {
+		return self::is_safe_url( $url );
+	}
+
+	/**
+	 * Return the merged allowlist state for the admin UI.
+	 *
+	 * @return array{callbacks:array<int,array{name:string,source:string,exists:bool}>,hooks:array<int,array{name:string,source:string}>}
+	 */
+	public static function get_allowlists(): array {
+		self::ensure_loaded();
+
+		$callbacks = array();
+		foreach ( array_keys( self::$allowed_callbacks ) as $fn ) {
+			$callbacks[] = array(
+				'name'   => $fn,
+				'source' => isset( self::$code_callbacks[ $fn ] ) ? 'code' : 'ui',
+				'exists' => function_exists( $fn ),
+			);
+		}
+
+		$hooks = array();
+		foreach ( array_keys( self::$allowed_hooks ) as $hook ) {
+			$hooks[] = array(
+				'name'   => $hook,
+				'source' => isset( self::$code_hooks[ $hook ] ) ? 'code' : 'ui',
+			);
+		}
+
+		return array( 'callbacks' => $callbacks, 'hooks' => $hooks );
 	}
 
 	public static function apply( int $capture_id, int $mapping_id ): array {
@@ -232,10 +320,17 @@ class WRM_Mapper {
 
 	private static function execute_chain( array $chain, int $post_id, array $payload, array $context ): array {
 		$type = sanitize_key( $chain['type'] ?? '' );
+		self::ensure_loaded();
 
 		switch ( $type ) {
 			case 'webhook':
 				return self::chain_webhook( $chain, $post_id, $payload, $context );
+
+			case 'email':
+				return self::chain_email( $chain, $post_id, $payload, $context );
+
+			case 'sms':
+				return self::chain_sms( $chain, $post_id, $payload, $context );
 
 			case 'action':
 				$hook = sanitize_text_field( $chain['hook'] ?? '' );
@@ -398,6 +493,107 @@ class WRM_Mapper {
 			'url'         => $url,
 			'status_code' => $status_code,
 		);
+	}
+
+	/**
+	 * Send an email via wp_mail(). All fields support merge tags.
+	 *
+	 * Config: { to, subject, body_template, cc, bcc, html (bool) }
+	 */
+	private static function chain_email( array $chain, int $post_id, array $payload, array $context ): array {
+		$to      = WRM_Merge_Tags::resolve( (string) ( $chain['to'] ?? '' ), $context );
+		$subject = WRM_Merge_Tags::resolve( (string) ( $chain['subject'] ?? '' ), $context );
+		$body    = WRM_Merge_Tags::resolve( (string) ( $chain['body_template'] ?? '' ), $context );
+
+		if ( ! $to || ! is_email( $to ) ) {
+			WRM_Logger::warning( 'mapper', 'Email chain skipped — invalid recipient', array( 'to' => $to ) );
+			return array( 'type' => 'email', 'status' => 'skipped', 'reason' => 'invalid_recipient', 'to' => $to );
+		}
+
+		$headers = array();
+		if ( ! empty( $chain['html'] ) ) {
+			$headers[] = 'Content-Type: text/html; charset=UTF-8';
+		}
+		if ( ! empty( $chain['cc'] ) ) {
+			$cc = WRM_Merge_Tags::resolve( (string) $chain['cc'], $context );
+			if ( is_email( $cc ) ) {
+				$headers[] = 'Cc: ' . $cc;
+			}
+		}
+		if ( ! empty( $chain['bcc'] ) ) {
+			$bcc = WRM_Merge_Tags::resolve( (string) $chain['bcc'], $context );
+			if ( is_email( $bcc ) ) {
+				$headers[] = 'Bcc: ' . $bcc;
+			}
+		}
+
+		$headers = apply_filters( 'wrm_email_chain_headers', $headers, $chain, $post_id, $payload );
+		$sent    = wp_mail( $to, $subject, $body, $headers );
+
+		if ( ! $sent ) {
+			WRM_Logger::error( 'mapper', 'Email chain failed to send', array( 'to' => $to, 'subject' => $subject ) );
+			return array( 'type' => 'email', 'status' => 'failed', 'to' => $to );
+		}
+
+		WRM_Logger::info( 'mapper', 'Email chain sent', array( 'to' => $to, 'subject' => $subject, 'ref_id' => $post_id ) );
+		return array( 'type' => 'email', 'status' => 'sent', 'to' => $to );
+	}
+
+	/**
+	 * Send an SMS. Defaults to the Twilio REST API; integrators can intercept any
+	 * gateway by returning a non-null array from the `wrm_send_sms` filter.
+	 *
+	 * Config: { provider, to, from, body, account_sid, auth_token }
+	 */
+	private static function chain_sms( array $chain, int $post_id, array $payload, array $context ): array {
+		$to   = WRM_Merge_Tags::resolve( (string) ( $chain['to'] ?? '' ), $context );
+		$from = WRM_Merge_Tags::resolve( (string) ( $chain['from'] ?? '' ), $context );
+		$text = WRM_Merge_Tags::resolve( (string) ( $chain['body'] ?? '' ), $context );
+
+		if ( ! $to || ! $text ) {
+			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'missing_to_or_body' );
+		}
+
+		// Allow any third-party gateway to handle the send and short-circuit Twilio.
+		$override = apply_filters( 'wrm_send_sms', null, $to, $text, $chain, $context );
+		if ( null !== $override ) {
+			return is_array( $override ) ? array_merge( array( 'type' => 'sms' ), $override ) : array( 'type' => 'sms', 'status' => 'sent', 'via' => 'filter' );
+		}
+
+		$provider = sanitize_key( $chain['provider'] ?? 'twilio' );
+		if ( 'twilio' !== $provider ) {
+			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'unsupported_provider', 'provider' => $provider );
+		}
+
+		$sid   = (string) ( $chain['account_sid'] ?? '' );
+		$token = (string) ( $chain['auth_token'] ?? '' );
+		if ( ! $sid || ! $token || ! $from ) {
+			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'missing_twilio_credentials' );
+		}
+
+		$endpoint = 'https://api.twilio.com/2010-04-01/Accounts/' . rawurlencode( $sid ) . '/Messages.json';
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'headers' => array(
+					'Authorization' => 'Basic ' . base64_encode( $sid . ':' . $token ),
+					'Content-Type'  => 'application/x-www-form-urlencoded',
+				),
+				'body'    => array( 'To' => $to, 'From' => $from, 'Body' => $text ),
+				'timeout' => (int) ( $chain['timeout'] ?? 15 ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			WRM_Logger::error( 'mapper', 'SMS chain error: ' . $response->get_error_message(), array( 'to' => $to ) );
+			return array( 'type' => 'sms', 'status' => 'failed', 'error' => $response->get_error_message() );
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		$ok   = $code >= 200 && $code < 300;
+		WRM_Logger::info( 'mapper', 'SMS chain dispatched', array( 'to' => $to, 'status_code' => $code, 'ref_id' => $post_id ) );
+
+		return array( 'type' => 'sms', 'status' => $ok ? 'sent' : 'failed', 'status_code' => $code, 'to' => $to );
 	}
 
 	/**

@@ -12,9 +12,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Installer {
 
-	const string ROUTES_TABLE   = 'wrm_routes';
-	const string CAPTURES_TABLE = 'wrm_captures';
-	const string JOBS_TABLE     = 'wrm_jobs';
+	const string ROUTES_TABLE    = 'wrm_routes';
+	const string CAPTURES_TABLE  = 'wrm_captures';
+	const string JOBS_TABLE      = 'wrm_jobs';
+	const string SCHEDULES_TABLE = 'wrm_schedules';
 
 	public static function install(): void {
 		global $wpdb;
@@ -83,6 +84,30 @@ class WRM_Installer {
 			) {$charset};"
 		);
 
+		// Schedules table — timer-driven and URL-triggered mapping runs.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_schedules (
+				id            bigint(20) unsigned  NOT NULL AUTO_INCREMENT,
+				label         varchar(255)         NOT NULL DEFAULT '',
+				mapping_id    bigint(20) unsigned  NOT NULL DEFAULT 0,
+				interval_key  varchar(40)          NOT NULL DEFAULT 'manual',
+				seed_payload  longtext             DEFAULT NULL,
+				source_url    varchar(500)         NOT NULL DEFAULT '',
+				source_method varchar(10)          NOT NULL DEFAULT 'GET',
+				trigger_token varchar(64)          NOT NULL DEFAULT '',
+				run_mode      enum('sync','async') NOT NULL DEFAULT 'async',
+				status        enum('active','paused') NOT NULL DEFAULT 'active',
+				last_run      datetime             DEFAULT NULL,
+				next_run      datetime             DEFAULT NULL,
+				last_result   text                 DEFAULT NULL,
+				created_at    datetime             NOT NULL,
+				PRIMARY KEY (id),
+				KEY status (status),
+				KEY next_run (next_run),
+				KEY trigger_token (trigger_token)
+			) {$charset};"
+		);
+
 		// Logs table
 		dbDelta(
 			"CREATE TABLE {$wpdb->prefix}wrm_logs (
@@ -103,6 +128,16 @@ class WRM_Installer {
 		update_option( 'wrm_db_version', WRM_DB_VERSION );
 		self::register_cpt_and_tax();
 		flush_rewrite_rules();
+	}
+
+	/**
+	 * Run install() on version bump so existing sites pick up new tables/columns
+	 * without needing a manual deactivate/reactivate. Cheap dbDelta is idempotent.
+	 */
+	public static function maybe_upgrade(): void {
+		if ( get_option( 'wrm_db_version' ) !== WRM_DB_VERSION ) {
+			self::install();
+		}
 	}
 
 	public static function register_cpt_and_tax(): void {
