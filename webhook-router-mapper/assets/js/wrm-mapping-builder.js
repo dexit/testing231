@@ -370,9 +370,9 @@
 	 * Chain (webhook / dispatcher):
 	 *   { type, url, method, timeout, headers{}, signing_secret, body_builder }
 	 * Chain (email):
-	 *   { type, to, subject, body_template, cc, bcc, html }
+	 *   { type, to, subject, format(text|html|mjml), body_template, mjml_source, cc, bcc, track }
 	 * Chain (sms):
-	 *   { type, provider, to, from, body, account_sid, auth_token }
+	 *   { type, provider(twilio|whatsapp|sinch|messagemedia|webhook), to, from, body, track, ...creds }
 	 * Chain (action):
 	 *   { type, hook }
 	 * Chain (function):
@@ -620,8 +620,8 @@
 			const defaults = {
 				webhook:    { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
 				dispatcher: { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
-				email:      { to: '', subject: '', body_template: '', cc: '', bcc: '', html: false },
-				sms:        { provider: 'twilio', to: '', from: '', body: '', account_sid: '', auth_token: '' },
+				email:      { to: '', subject: '', format: 'html', body_template: '', mjml_source: '', cc: '', bcc: '', track: true },
+				sms:        { provider: 'twilio', to: '', from: '', body: '', track: true, account_sid: '', auth_token: '', phone_number_id: '', access_token: '', api_version: 'v19.0', service_plan_id: '', api_token: '', api_key: '', api_secret: '', url: '', signing_secret: '' },
 				action:     { hook: '' },
 				function:   { function: '' },
 				mapping:    { mapping_id: 0, chain_source: 'payload', chain_source_key: '' }
@@ -721,66 +721,118 @@
 				'Visually construct the outgoing JSON payload. Use {{payload.field}} for merge tags. Supports nested objects, static arrays, and loop arrays.'));
 		}
 
+		// Shared: a text input with a merge-tag picker button.
+		function _tagInput (chain, key, placeholder) {
+			const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
+			$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
+			const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
+			$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
+			return $('<div class="wrm-input-btn">').append($inp, $tag);
+		}
+		function _textInput (chain, key, placeholder, type) {
+			return $('<input class="widefat">').attr('type', type || 'text').attr('placeholder', placeholder || '')
+				.val(chain[key] || '').on('input', function () { chain[key] = $(this).val(); _save(); });
+		}
+
 		function _chainEmail (chain, $body) {
-			const tagInput = (label, key, placeholder) => {
-				const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
-				$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
-				const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
-				$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
-				return _frow(label, $('<div class="wrm-input-btn">').append($inp, $tag));
-			};
 			$body.append(
-				tagInput('To', 'to', '{{payload.email}}'),
-				tagInput('Subject', 'subject', 'New submission: {{payload.name}}'),
-				_frow('Body',
-					(function () {
-						const $ta = $('<textarea class="widefat" rows="5" placeholder="Hi {{payload.name}}, ...">').val(chain.body_template || '');
-						$ta.on('input', function () { chain.body_template = $(this).val(); _save(); });
-						return $ta;
-					})(),
-					'Supports merge tags. Tick HTML below to send as text/html.'
-				),
-				tagInput('Cc (optional)', 'cc', ''),
-				tagInput('Bcc (optional)', 'bcc', ''),
-				_frow('HTML email',
+				_frow('To', _tagInput(chain, 'to', '{{payload.email}}')),
+				_frow('Subject', _tagInput(chain, 'subject', 'New submission: {{payload.name}}'))
+			);
+
+			// Format selector switches between the plain/HTML body and MJML source.
+			const $bodyRow = _frow('Body',
+				(function () {
+					const $ta = $('<textarea class="widefat" rows="6" placeholder="Hi {{payload.name}}, ...">').val(chain.body_template || '');
+					$ta.on('input', function () { chain.body_template = $(this).val(); _save(); });
+					return $ta;
+				})(),
+				'Supports merge tags. Choose HTML to send text/html.'
+			);
+			const $mjmlRow = _frow('MJML source',
+				(function () {
+					const $ta = $('<textarea class="widefat code" rows="10" placeholder="<mjml><mj-body><mj-section><mj-column><mj-text>Hi {{payload.name}}</mj-text></mj-column></mj-section></mj-body></mjml>">').val(chain.mjml_source || '');
+					$ta.on('input', function () { chain.mjml_source = $(this).val(); _save(); });
+					return $ta;
+				})(),
+				'Compiled to responsive HTML (via the MJML API or the <code>wrm_render_mjml</code> filter; falls back to a safe responsive wrapper).'
+			);
+
+			const fmt = chain.format || (chain.html ? 'html' : 'text');
+			const applyFormat = (f) => {
+				$bodyRow.toggle(f === 'text' || f === 'html');
+				$mjmlRow.toggle(f === 'mjml');
+			};
+			$body.append(_frow('Format',
+				$('<select>').append(
+					$('<option value="text">Plain text</option>'),
+					$('<option value="html">HTML</option>'),
+					$('<option value="mjml">MJML → responsive HTML</option>')
+				).val(fmt).on('change', function () { chain.format = $(this).val(); applyFormat(chain.format); _save(); })
+			));
+			$body.append($bodyRow, $mjmlRow);
+			applyFormat(fmt);
+
+			$body.append(
+				_frow('Cc (optional)', _tagInput(chain, 'cc', '')),
+				_frow('Bcc (optional)', _tagInput(chain, 'bcc', '')),
+				_frow('Tracking',
 					$('<label class="wrm-toggle">').append(
-						$('<input type="checkbox">').prop('checked', !!chain.html).on('change', function () { chain.html = $(this).is(':checked'); _save(); }),
-						' Send as HTML (Content-Type: text/html)'
+						$('<input type="checkbox">').prop('checked', chain.track !== false).on('change', function () { chain.track = $(this).is(':checked'); _save(); }),
+						' Track opens & clicks (injects a pixel and rewrites links in HTML/MJML emails)'
 					)
 				)
 			);
 		}
 
+		// Per-provider credential field definitions for the SMS/messaging chain.
+		const SMS_PROVIDERS = {
+			twilio:       { label: 'Twilio',        fields: [['account_sid', 'Account SID', 'ACxxxx', 'text'], ['auth_token', 'Auth Token', '', 'password'], ['from', 'From number', '+15551234567', 'text']] },
+			whatsapp:     { label: 'WhatsApp (Meta Cloud)', fields: [['phone_number_id', 'Phone Number ID', '', 'text'], ['access_token', 'Access Token', '', 'password'], ['api_version', 'Graph API version', 'v19.0', 'text']] },
+			sinch:        { label: 'Sinch',         fields: [['service_plan_id', 'Service Plan ID', '', 'text'], ['api_token', 'API Token', '', 'password'], ['from', 'From', '', 'text']] },
+			messagemedia: { label: 'MessageMedia',  fields: [['api_key', 'API Key', '', 'text'], ['api_secret', 'API Secret', '', 'password']] },
+			webhook:      { label: 'Webhook',       fields: [['url', 'Webhook URL', 'https://...', 'text'], ['signing_secret', 'Signing Secret (optional)', '', 'password']] },
+		};
+
 		function _chainSms (chain, $body) {
-			const tagInput = (label, key, placeholder) => {
-				const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
-				$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
-				const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
-				$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
-				return _frow(label, $('<div class="wrm-input-btn">').append($inp, $tag));
-			};
 			$body.append(
 				_frow('Provider',
-					$('<select>').append($('<option value="twilio">Twilio</option>'))
-						.val(chain.provider || 'twilio')
-						.on('change', function () { chain.provider = $(this).val(); _save(); }),
-					'Other gateways: return a value from the <code>wrm_send_sms</code> PHP filter.'
+					$('<select>').append(
+						Object.entries(SMS_PROVIDERS).map(([k, v]) => $('<option>').val(k).text(v.label))
+					).val(chain.provider || 'twilio').on('change', function () {
+						chain.provider = $(this).val();
+						_save();
+						renderProviderFields();
+					}),
+					'Other gateways: return a result array from the <code>wrm_send_message</code> PHP filter.'
 				),
-				tagInput('To', 'to', '{{payload.phone}}'),
-				tagInput('From', 'from', '+15551234567'),
+				_frow('To', _tagInput(chain, 'to', '{{payload.phone}}')),
 				_frow('Message',
 					(function () {
-						const $ta = $('<textarea class="widefat" rows="3" placeholder="Hi {{payload.name}}, your code is ...">').val(chain.body || '');
+						const $ta = $('<textarea class="widefat" rows="3" placeholder="Hi {{payload.name}}, ...">').val(chain.body || '');
 						$ta.on('input', function () { chain.body = $(this).val(); _save(); });
 						return $ta;
 					})()
-				),
-				_frow('Twilio Account SID',
-					$('<input type="text" class="widefat" placeholder="ACxxxxxxxx">').val(chain.account_sid || '').on('input', function () { chain.account_sid = $(this).val(); _save(); })
-				),
-				_frow('Twilio Auth Token',
-					$('<input type="password" class="widefat" placeholder="auth token">').val(chain.auth_token || '').on('input', function () { chain.auth_token = $(this).val(); _save(); }),
-					'Stored in the mapping config. Restrict who can edit mappings.'
+				)
+			);
+
+			const $creds = $('<div class="wrm-sms-creds">');
+			function renderProviderFields () {
+				$creds.empty();
+				const def = SMS_PROVIDERS[chain.provider || 'twilio'] || SMS_PROVIDERS.twilio;
+				def.fields.forEach(([key, label, ph, type]) => {
+					$creds.append(_frow(label, _textInput(chain, key, ph, type)));
+				});
+			}
+			renderProviderFields();
+			$body.append($creds);
+
+			$body.append(
+				_frow('Tracking',
+					$('<label class="wrm-toggle">').append(
+						$('<input type="checkbox">').prop('checked', chain.track !== false).on('change', function () { chain.track = $(this).is(':checked'); _save(); }),
+						' Track delivery (store message; provider status webhooks update delivered/bounced/failed)'
+					)
 				)
 			);
 		}

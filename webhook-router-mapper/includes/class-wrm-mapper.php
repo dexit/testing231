@@ -183,10 +183,12 @@ class WRM_Mapper {
 		$payload = apply_filters( 'wrm_normalize_payload', $payload, $capture_id, $mapping_id );
 
 		$context = array(
-			'payload' => $payload,
-			'post'    => null,
-			'meta'    => array(),
-			'now'     => time(),
+			'payload'    => $payload,
+			'post'       => null,
+			'meta'       => array(),
+			'now'        => time(),
+			'capture_id' => $capture_id,
+			'mapping_id' => $mapping_id,
 		);
 
 		$cpt             = sanitize_key( $config['cpt'] ?? 'post' );
@@ -498,20 +500,59 @@ class WRM_Mapper {
 	/**
 	 * Send an email via wp_mail(). All fields support merge tags.
 	 *
-	 * Config: { to, subject, body_template, cc, bcc, html (bool) }
+	 * Config: {
+	 *   to, subject, cc, bcc,
+	 *   format: 'text' | 'html' | 'mjml',   // default 'text'
+	 *   body_template,                       // text/html source
+	 *   mjml_source,                         // MJML source (format=mjml)
+	 *   track (bool)                         // inject open pixel + click tracking
+	 * }
 	 */
 	private static function chain_email( array $chain, int $post_id, array $payload, array $context ): array {
 		$to      = WRM_Merge_Tags::resolve( (string) ( $chain['to'] ?? '' ), $context );
 		$subject = WRM_Merge_Tags::resolve( (string) ( $chain['subject'] ?? '' ), $context );
-		$body    = WRM_Merge_Tags::resolve( (string) ( $chain['body_template'] ?? '' ), $context );
+		$format  = sanitize_key( $chain['format'] ?? ( ! empty( $chain['html'] ) ? 'html' : 'text' ) );
 
 		if ( ! $to || ! is_email( $to ) ) {
 			WRM_Logger::warning( 'mapper', 'Email chain skipped — invalid recipient', array( 'to' => $to ) );
 			return array( 'type' => 'email', 'status' => 'skipped', 'reason' => 'invalid_recipient', 'to' => $to );
 		}
 
+		// Resolve the body per format. MJML is compiled to responsive HTML.
+		if ( 'mjml' === $format ) {
+			$mjml = WRM_Merge_Tags::resolve( (string) ( $chain['mjml_source'] ?? '' ), $context );
+			$body = WRM_MJML::render( $mjml, $chain['mjml'] ?? array() );
+			$html = true;
+		} else {
+			$body = WRM_Merge_Tags::resolve( (string) ( $chain['body_template'] ?? '' ), $context );
+			$html = ( 'html' === $format );
+		}
+
+		// Tracking: register the message first so we can instrument the HTML.
+		$tracking = ! empty( $chain['track'] );
+		$token    = '';
+		$msg_id   = 0;
+		if ( $tracking ) {
+			$created = WRM_Tracking::create_message(
+				array(
+					'channel'    => 'email',
+					'provider'   => 'wp_mail',
+					'recipient'  => $to,
+					'subject'    => $subject,
+					'mapping_id' => (int) ( $context['mapping_id'] ?? 0 ),
+					'capture_id' => (int) ( $context['capture_id'] ?? 0 ),
+					'status'     => 'queued',
+				)
+			);
+			$msg_id = $created['id'];
+			$token  = $created['token'];
+			if ( $html && $token ) {
+				$body = WRM_Tracking::instrument_html( $body, $token );
+			}
+		}
+
 		$headers = array();
-		if ( ! empty( $chain['html'] ) ) {
+		if ( $html ) {
 			$headers[] = 'Content-Type: text/html; charset=UTF-8';
 		}
 		if ( ! empty( $chain['cc'] ) ) {
@@ -530,70 +571,65 @@ class WRM_Mapper {
 		$headers = apply_filters( 'wrm_email_chain_headers', $headers, $chain, $post_id, $payload );
 		$sent    = wp_mail( $to, $subject, $body, $headers );
 
-		if ( ! $sent ) {
-			WRM_Logger::error( 'mapper', 'Email chain failed to send', array( 'to' => $to, 'subject' => $subject ) );
-			return array( 'type' => 'email', 'status' => 'failed', 'to' => $to );
+		if ( $msg_id ) {
+			WRM_Tracking::update_message( $msg_id, array( 'status' => $sent ? 'sent' : 'failed', 'sent_at' => current_time( 'mysql', true ) ) );
+			WRM_Tracking::record_event( $msg_id, $sent ? 'sent' : 'failed' );
 		}
 
-		WRM_Logger::info( 'mapper', 'Email chain sent', array( 'to' => $to, 'subject' => $subject, 'ref_id' => $post_id ) );
-		return array( 'type' => 'email', 'status' => 'sent', 'to' => $to );
+		if ( ! $sent ) {
+			WRM_Logger::error( 'mapper', 'Email chain failed to send', array( 'to' => $to, 'subject' => $subject ) );
+			return array( 'type' => 'email', 'status' => 'failed', 'to' => $to, 'message_id' => $msg_id );
+		}
+
+		WRM_Logger::info( 'mapper', 'Email chain sent', array( 'to' => $to, 'subject' => $subject, 'format' => $format, 'tracked' => $tracking, 'ref_id' => $post_id ) );
+		return array( 'type' => 'email', 'status' => 'sent', 'to' => $to, 'format' => $format, 'tracked' => $tracking, 'message_id' => $msg_id );
 	}
 
 	/**
-	 * Send an SMS. Defaults to the Twilio REST API; integrators can intercept any
-	 * gateway by returning a non-null array from the `wrm_send_sms` filter.
+	 * Send an SMS / WhatsApp / chat message through a pluggable provider.
+	 * Supported providers: twilio, whatsapp, sinch, messagemedia, webhook.
+	 * Any gateway can be intercepted via the `wrm_send_message` filter.
 	 *
-	 * Config: { provider, to, from, body, account_sid, auth_token }
+	 * Config: { provider, to, from, body, track, <provider-specific creds...> }
 	 */
 	private static function chain_sms( array $chain, int $post_id, array $payload, array $context ): array {
-		$to   = WRM_Merge_Tags::resolve( (string) ( $chain['to'] ?? '' ), $context );
-		$from = WRM_Merge_Tags::resolve( (string) ( $chain['from'] ?? '' ), $context );
-		$text = WRM_Merge_Tags::resolve( (string) ( $chain['body'] ?? '' ), $context );
+		$provider = sanitize_key( $chain['provider'] ?? 'twilio' );
+		$to       = WRM_Merge_Tags::resolve( (string) ( $chain['to'] ?? '' ), $context );
+		$from     = WRM_Merge_Tags::resolve( (string) ( $chain['from'] ?? '' ), $context );
+		$text     = WRM_Merge_Tags::resolve( (string) ( $chain['body'] ?? '' ), $context );
 
 		if ( ! $to || ! $text ) {
 			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'missing_to_or_body' );
 		}
 
-		// Allow any third-party gateway to handle the send and short-circuit Twilio.
-		$override = apply_filters( 'wrm_send_sms', null, $to, $text, $chain, $context );
-		if ( null !== $override ) {
-			return is_array( $override ) ? array_merge( array( 'type' => 'sms' ), $override ) : array( 'type' => 'sms', 'status' => 'sent', 'via' => 'filter' );
+		// Provider config = the chain itself plus the resolved `from`.
+		$config         = $chain;
+		$config['from'] = $from;
+
+		$result = WRM_Messaging::send( $provider, $config, $to, $text, $context );
+
+		// Optional deliverability tracking — store the message so a provider
+		// status webhook can later flip it to delivered/bounced/failed.
+		if ( ! empty( $chain['track'] ) ) {
+			$created = WRM_Tracking::create_message(
+				array(
+					'channel'             => 'whatsapp' === $provider ? 'whatsapp' : 'sms',
+					'provider'            => $provider,
+					'recipient'           => $to,
+					'subject'             => mb_substr( $text, 0, 120 ),
+					'mapping_id'          => (int) ( $context['mapping_id'] ?? 0 ),
+					'capture_id'          => (int) ( $context['capture_id'] ?? 0 ),
+					'provider_message_id' => (string) ( $result['message_id'] ?? '' ),
+					'status'              => ( $result['status'] ?? '' ) === 'sent' ? 'sent' : 'failed',
+				)
+			);
+			WRM_Tracking::record_event( $created['id'], ( $result['status'] ?? '' ) === 'sent' ? 'sent' : 'failed' );
+			$result['message_id_local'] = $created['id'];
 		}
 
-		$provider = sanitize_key( $chain['provider'] ?? 'twilio' );
-		if ( 'twilio' !== $provider ) {
-			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'unsupported_provider', 'provider' => $provider );
-		}
+		WRM_Logger::info( 'mapper', 'SMS chain dispatched', array( 'provider' => $provider, 'to' => $to, 'status' => $result['status'] ?? '', 'ref_id' => $post_id ) );
 
-		$sid   = (string) ( $chain['account_sid'] ?? '' );
-		$token = (string) ( $chain['auth_token'] ?? '' );
-		if ( ! $sid || ! $token || ! $from ) {
-			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'missing_twilio_credentials' );
-		}
-
-		$endpoint = 'https://api.twilio.com/2010-04-01/Accounts/' . rawurlencode( $sid ) . '/Messages.json';
-		$response = wp_remote_post(
-			$endpoint,
-			array(
-				'headers' => array(
-					'Authorization' => 'Basic ' . base64_encode( $sid . ':' . $token ),
-					'Content-Type'  => 'application/x-www-form-urlencoded',
-				),
-				'body'    => array( 'To' => $to, 'From' => $from, 'Body' => $text ),
-				'timeout' => (int) ( $chain['timeout'] ?? 15 ),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			WRM_Logger::error( 'mapper', 'SMS chain error: ' . $response->get_error_message(), array( 'to' => $to ) );
-			return array( 'type' => 'sms', 'status' => 'failed', 'error' => $response->get_error_message() );
-		}
-
-		$code = (int) wp_remote_retrieve_response_code( $response );
-		$ok   = $code >= 200 && $code < 300;
-		WRM_Logger::info( 'mapper', 'SMS chain dispatched', array( 'to' => $to, 'status_code' => $code, 'ref_id' => $post_id ) );
-
-		return array( 'type' => 'sms', 'status' => $ok ? 'sent' : 'failed', 'status_code' => $code, 'to' => $to );
+		return array_merge( array( 'type' => 'sms' ), $result );
 	}
 
 	/**

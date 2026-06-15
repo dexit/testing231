@@ -5,6 +5,7 @@ import JobsPage from './pages/JobsPage';
 import LogsPage from './pages/LogsPage';
 import SchedulesPage from './pages/SchedulesPage';
 import FunctionsPage from './pages/FunctionsPage';
+import MessagesPage from './pages/MessagesPage';
 
 export default function App() {
   const initialTab = window.wrmAdminData?.initialTab || 'routes';
@@ -13,6 +14,7 @@ export default function App() {
     { name: 'captures',  title: 'Captures',  className: 'tab-captures' },
     { name: 'jobs',      title: 'Jobs',      className: 'tab-jobs' },
     { name: 'schedules', title: 'Schedules', className: 'tab-schedules' },
+    { name: 'messages',  title: 'Messages',  className: 'tab-messages' },
     { name: 'functions', title: 'Functions', className: 'tab-functions' },
     { name: 'logs',      title: 'Logs',      className: 'tab-logs' },
   ];
@@ -25,6 +27,7 @@ export default function App() {
           if (tab.name === 'captures')  return <CapturesPage />;
           if (tab.name === 'jobs')      return <JobsPage />;
           if (tab.name === 'schedules') return <SchedulesPage />;
+          if (tab.name === 'messages')  return <MessagesPage />;
           if (tab.name === 'functions') return <FunctionsPage />;
           if (tab.name === 'logs')      return <LogsPage />;
           return null;

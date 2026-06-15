@@ -384,6 +384,93 @@ class WRM_Admin_API {
 				),
 			)
 		);
+
+		// -----------------------------------------------------------------
+		// Message tracking (admin views)
+		// -----------------------------------------------------------------
+		register_rest_route(
+			$ns,
+			'/messages',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'list_messages' ),
+				'permission_callback' => $cap,
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/messages/stats',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'message_stats' ),
+				'permission_callback' => $cap,
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/messages/(?P<id>\d+)/events',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'message_events' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// -----------------------------------------------------------------
+		// Public tracking endpoints (pixel / click / provider status)
+		// -----------------------------------------------------------------
+		register_rest_route(
+			$ns,
+			'/track/open/(?P<token>[A-Za-z0-9]+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( 'WRM_Tracking', 'handle_open' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/track/click/(?P<token>[A-Za-z0-9]+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( 'WRM_Tracking', 'handle_click' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/track/status/(?P<provider>[a-z0-9_]+)',
+			array(
+				'methods'             => array( 'GET', 'POST' ),
+				'callback'            => array( 'WRM_Tracking', 'handle_status' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Message tracking handlers
+	// -------------------------------------------------------------------------
+
+	public static function list_messages( WP_REST_Request $req ): WP_REST_Response {
+		$messages = WRM_Tracking::list_messages(
+			array(
+				'channel'  => sanitize_key( (string) ( $req->get_param( 'channel' ) ?? '' ) ),
+				'status'   => sanitize_key( (string) ( $req->get_param( 'status' ) ?? '' ) ),
+				'per_page' => (int) ( $req->get_param( 'per_page' ) ?? 25 ),
+				'offset'   => (int) ( $req->get_param( 'offset' ) ?? 0 ),
+			)
+		);
+		return new WP_REST_Response( $messages, 200 );
+	}
+
+	public static function message_stats(): WP_REST_Response {
+		return new WP_REST_Response( WRM_Tracking::stats(), 200 );
+	}
+
+	public static function message_events( WP_REST_Request $req ): WP_REST_Response {
+		$id = (int) $req->get_param( 'id' );
+		return new WP_REST_Response( WRM_Tracking::get_events( $id ), 200 );
 	}
 
 	// -------------------------------------------------------------------------

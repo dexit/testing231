@@ -12,10 +12,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Installer {
 
-	const string ROUTES_TABLE    = 'wrm_routes';
-	const string CAPTURES_TABLE  = 'wrm_captures';
-	const string JOBS_TABLE      = 'wrm_jobs';
-	const string SCHEDULES_TABLE = 'wrm_schedules';
+	const string ROUTES_TABLE         = 'wrm_routes';
+	const string CAPTURES_TABLE       = 'wrm_captures';
+	const string JOBS_TABLE           = 'wrm_jobs';
+	const string SCHEDULES_TABLE      = 'wrm_schedules';
+	const string MESSAGES_TABLE       = 'wrm_messages';
+	const string MESSAGE_EVENTS_TABLE = 'wrm_message_events';
 
 	public static function install(): void {
 		global $wpdb;
@@ -105,6 +107,50 @@ class WRM_Installer {
 				KEY status (status),
 				KEY next_run (next_run),
 				KEY trigger_token (trigger_token)
+			) {$charset};"
+		);
+
+		// Messages table — one row per outbound email/SMS/WhatsApp message,
+		// keyed by a tracking token for open/click/deliverability correlation.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_messages (
+				id                  bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				token               varchar(64)         NOT NULL DEFAULT '',
+				channel             varchar(20)         NOT NULL DEFAULT 'email',
+				provider            varchar(40)         NOT NULL DEFAULT '',
+				recipient           varchar(255)        NOT NULL DEFAULT '',
+				subject             varchar(255)        NOT NULL DEFAULT '',
+				mapping_id          bigint(20) unsigned NOT NULL DEFAULT 0,
+				capture_id          bigint(20) unsigned NOT NULL DEFAULT 0,
+				provider_message_id varchar(191)        NOT NULL DEFAULT '',
+				status              varchar(20)         NOT NULL DEFAULT 'queued',
+				open_count          int unsigned        NOT NULL DEFAULT 0,
+				click_count         int unsigned        NOT NULL DEFAULT 0,
+				sent_at             datetime            DEFAULT NULL,
+				first_open_at       datetime            DEFAULT NULL,
+				created_at          datetime            NOT NULL,
+				PRIMARY KEY (id),
+				KEY token (token),
+				KEY channel (channel),
+				KEY status (status),
+				KEY provider_message_id (provider_message_id)
+			) {$charset};"
+		);
+
+		// Message events — append-only deliverability/engagement log per message.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_message_events (
+				id         bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				message_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				event      varchar(30)         NOT NULL DEFAULT '',
+				url        varchar(500)        NOT NULL DEFAULT '',
+				ip         varchar(45)         NOT NULL DEFAULT '',
+				user_agent varchar(255)        NOT NULL DEFAULT '',
+				data       longtext            DEFAULT NULL,
+				created_at datetime            NOT NULL,
+				PRIMARY KEY (id),
+				KEY message_id (message_id),
+				KEY event (event)
 			) {$charset};"
 		);
 

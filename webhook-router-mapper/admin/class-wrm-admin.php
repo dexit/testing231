@@ -25,6 +25,7 @@ class WRM_Admin {
 			'webhook-router_page_wrm-logs',
 			'webhook-router_page_wrm-schedules',
 			'webhook-router_page_wrm-functions',
+			'webhook-router_page_wrm-messages',
 		);
 		if ( ! in_array( $hook, $wrm_pages, true ) ) {
 			return;
@@ -48,6 +49,7 @@ class WRM_Admin {
 				'webhook-router_page_wrm-logs'      => 'logs',
 				'webhook-router_page_wrm-schedules' => 'schedules',
 				'webhook-router_page_wrm-functions' => 'functions',
+				'webhook-router_page_wrm-messages'  => 'messages',
 			);
 			wp_localize_script(
 				'wrm-admin-app',
@@ -77,11 +79,16 @@ class WRM_Admin {
 		add_submenu_page( 'wrm-routes', __( 'Captures', 'wrm' ), __( 'Captures', 'wrm' ), 'manage_options', 'wrm-captures', array( __CLASS__, 'page_captures' ) );
 		add_submenu_page( 'wrm-routes', __( 'Jobs', 'wrm' ),      __( 'Jobs', 'wrm' ),      'manage_options', 'wrm-jobs',      array( __CLASS__, 'page_jobs' ) );
 		add_submenu_page( 'wrm-routes', __( 'Schedules', 'wrm' ), __( 'Schedules', 'wrm' ), 'manage_options', 'wrm-schedules', array( __CLASS__, 'page_schedules' ) );
+		add_submenu_page( 'wrm-routes', __( 'Messages', 'wrm' ),  __( 'Messages', 'wrm' ),  'manage_options', 'wrm-messages',  array( __CLASS__, 'page_messages' ) );
 		add_submenu_page( 'wrm-routes', __( 'Functions', 'wrm' ), __( 'Functions', 'wrm' ), 'manage_options', 'wrm-functions', array( __CLASS__, 'page_functions' ) );
 		add_submenu_page( 'wrm-routes', __( 'Logs', 'wrm' ),      __( 'Logs', 'wrm' ),      'manage_options', 'wrm-logs',      array( __CLASS__, 'page_logs' ) );
 	}
 
 	public static function page_schedules(): void {
+		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
+	}
+
+	public static function page_messages(): void {
 		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
 	}
 
