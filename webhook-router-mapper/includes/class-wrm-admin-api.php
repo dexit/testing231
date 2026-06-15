@@ -192,6 +192,26 @@ class WRM_Admin_API {
 			)
 		);
 
+		register_rest_route(
+			$ns,
+			'/captures/(?P<id>\d+)/replay',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'replay_capture' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		register_rest_route(
+			$ns,
+			'/captures/(?P<id>\d+)/resubmit',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'resubmit_capture' ),
+				'permission_callback' => $cap,
+			)
+		);
+
 		// -----------------------------------------------------------------
 		// Jobs
 		// -----------------------------------------------------------------
@@ -637,6 +657,73 @@ class WRM_Admin_API {
 		}
 
 		return new WP_REST_Response( array( 'id' => $id, 'paths' => $paths ), 200 );
+	}
+
+	/**
+	 * Async-replay a capture through a mapping via the job queue.
+	 * Unlike /apply (synchronous), this enqueues a job and returns immediately.
+	 * Expects JSON body: { "mapping_id": int }
+	 */
+	public static function replay_capture( WP_REST_Request $req ): WP_REST_Response {
+		$id      = (int) $req->get_param( 'id' );
+		$capture = WRM_Capture::get( $id );
+		if ( ! $capture ) {
+			return new WP_REST_Response( array( 'error' => 'Capture not found.' ), 404 );
+		}
+
+		$data       = $req->get_json_params() ?: array();
+		$mapping_id = (int) ( $data['mapping_id'] ?? 0 );
+		if ( ! $mapping_id ) {
+			return new WP_REST_Response( array( 'error' => 'mapping_id is required.' ), 400 );
+		}
+
+		$job_id = WRM_Job_Queue::enqueue( $capture['route_slug'], $id, $mapping_id );
+		WRM_Logger::info( 'admin', "Capture #{$id} replayed as job #{$job_id}.", array( 'ref_id' => $id, 'mapping_id' => $mapping_id ) );
+
+		return new WP_REST_Response( array( 'job_id' => $job_id, 'capture_id' => $id, 'mapping_id' => $mapping_id ), 201 );
+	}
+
+	/**
+	 * Store an edited payload as a new capture and enqueue it for async processing.
+	 * Expects JSON body: { "mapping_id": int, "payload": object }
+	 */
+	public static function resubmit_capture( WP_REST_Request $req ): WP_REST_Response {
+		$id      = (int) $req->get_param( 'id' );
+		$original = WRM_Capture::get( $id );
+		if ( ! $original ) {
+			return new WP_REST_Response( array( 'error' => 'Capture not found.' ), 404 );
+		}
+
+		$data       = $req->get_json_params() ?: array();
+		$mapping_id = (int) ( $data['mapping_id'] ?? 0 );
+		$payload    = is_array( $data['payload'] ?? null ) ? $data['payload'] : array();
+
+		if ( ! $mapping_id ) {
+			return new WP_REST_Response( array( 'error' => 'mapping_id is required.' ), 400 );
+		}
+
+		// Store edited payload as a new capture so the original is preserved.
+		$new_id = WRM_Capture::store_internal(
+			$original['route_slug'],
+			$original['provider'],
+			$payload
+		);
+
+		if ( ! $new_id ) {
+			return new WP_REST_Response( array( 'error' => 'Failed to store resubmit capture.' ), 500 );
+		}
+
+		$job_id = WRM_Job_Queue::enqueue( $original['route_slug'], $new_id, $mapping_id );
+		WRM_Logger::info(
+			'admin',
+			"Capture #{$id} resubmitted (edited) as capture #{$new_id}, job #{$job_id}.",
+			array( 'ref_id' => $new_id, 'original_id' => $id, 'mapping_id' => $mapping_id )
+		);
+
+		return new WP_REST_Response(
+			array( 'job_id' => $job_id, 'new_capture_id' => $new_id, 'original_capture_id' => $id, 'mapping_id' => $mapping_id ),
+			201
+		);
 	}
 
 	// -------------------------------------------------------------------------

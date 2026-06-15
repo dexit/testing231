@@ -106,6 +106,35 @@ class WRM_Installer {
 	}
 
 	public static function register_cpt_and_tax(): void {
+		// WP 6.9+/7.0+ — disable Gutenberg for wrm_mapping so the jQuery
+		// mapping builder meta box remains the primary editing interface.
+		add_filter(
+			'use_block_editor_for_post_type',
+			static function ( bool $use, string $post_type ): bool {
+				return 'wrm_mapping' === $post_type ? false : $use;
+			},
+			10,
+			2
+		);
+
+		// WP 6.9+ REST controller — register the CPT's REST base so the admin
+		// API can link to the WP native endpoint and future tooling can discover it.
+		add_filter(
+			'register_post_type_args',
+			static function ( array $args, string $post_type ): array {
+				if ( 'wrm_mapping' !== $post_type ) {
+					return $args;
+				}
+				// Ensure the REST namespace is set even if show_in_rest is later
+				// enabled by a third-party plugin or site option.
+				$args['rest_base']      = 'wrm-mappings';
+				$args['rest_namespace'] = 'wrm/v1';
+				return $args;
+			},
+			10,
+			2
+		);
+
 		register_taxonomy(
 			'wrm_provider',
 			'wrm_mapping',

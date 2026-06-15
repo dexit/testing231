@@ -225,12 +225,12 @@ export default function JobsPage() {
                   <td><code>{job.id}</code></td>
                   <td><code>{job.route_slug || job.route || '—'}</code></td>
                   <td><StatusBadge status={job.status || 'queued'} /></td>
-                  <td>{job.attempts !== undefined ? `${job.attempts}/${job.max_attempts || '?'}` : '—'}</td>
+                  <td>{job.attempt !== undefined ? `${job.attempt}/${job.max_attempts || '?'}` : '—'}</td>
                   <td>{job.duration_ms !== undefined ? `${job.duration_ms}ms` : '—'}</td>
                   <td style={{ fontSize: 12 }}>{job.queued_at || job.created_at || '—'}</td>
                   <td style={{ fontSize: 12 }}>{job.finished_at || '—'}</td>
                   <td style={{ fontSize: 11, color: '#d63638', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {job.error ? job.error.substring(0, 80) + (job.error.length > 80 ? '…' : '') : '—'}
+                    {job.error_message ? job.error_message.substring(0, 80) + (job.error_message.length > 80 ? '…' : '') : '—'}
                   </td>
                   <td>
                     {(job.status === 'failed' || job.status === 'dead') && (

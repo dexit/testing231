@@ -31,6 +31,7 @@ spl_autoload_register( static function ( string $class ): void {
 		'WRM_Job_Queue'      => 'includes/class-wrm-job-queue.php',
 		'WRM_Providers'      => 'includes/class-wrm-providers.php',
 		'WRM_Admin_API'      => 'includes/class-wrm-admin-api.php',
+		'WRM_Elementor'      => 'includes/class-wrm-elementor.php',
 		'WRM_Admin'          => 'admin/class-wrm-admin.php',
 		'WRM_Mapping_Editor' => 'admin/class-wrm-mapping-editor.php',
 	);
@@ -47,6 +48,7 @@ add_action( 'plugins_loaded', static function (): void {
 	WRM_Router::init();
 	WRM_Job_Queue::init();
 	WRM_Admin_API::init();
+	WRM_Elementor::init();
 	if ( is_admin() ) {
 		WRM_Admin::init();
 	}
