@@ -1,4 +1,5 @@
 import { TabPanel } from '@wordpress/components';
+import DashboardPage from './pages/DashboardPage';
 import RoutesPage from './pages/RoutesPage';
 import CapturesPage from './pages/CapturesPage';
 import JobsPage from './pages/JobsPage';
@@ -8,8 +9,9 @@ import FunctionsPage from './pages/FunctionsPage';
 import MessagesPage from './pages/MessagesPage';
 
 export default function App() {
-  const initialTab = window.wrmAdminData?.initialTab || 'routes';
+  const initialTab = window.wrmAdminData?.initialTab || 'dashboard';
   const tabs = [
+    { name: 'dashboard', title: 'Dashboard', className: 'tab-dashboard' },
     { name: 'routes',    title: 'Routes',    className: 'tab-routes' },
     { name: 'captures',  title: 'Captures',  className: 'tab-captures' },
     { name: 'jobs',      title: 'Jobs',      className: 'tab-jobs' },
@@ -23,6 +25,7 @@ export default function App() {
       <h1 className="wp-heading-inline">Webhook Router &amp; Mapper</h1>
       <TabPanel tabs={tabs} initialTabName={initialTab}>
         {(tab) => {
+          if (tab.name === 'dashboard') return <DashboardPage />;
           if (tab.name === 'routes')    return <RoutesPage />;
           if (tab.name === 'captures')  return <CapturesPage />;
           if (tab.name === 'jobs')      return <JobsPage />;

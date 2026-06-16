@@ -38,6 +38,10 @@ export default function RoutesPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [showTokenToggle, setShowTokenToggle] = useState(false);
 
   const loadRoutes = useCallback(() => {
     setLoading(true);
@@ -83,6 +87,33 @@ export default function RoutesPage() {
     apiFetch({ path: `/wrm/v1/routes/${deleteTarget.slug}`, method: 'DELETE' })
       .then(() => { setDeleteTarget(null); showNotice('Route deleted.'); loadRoutes(); })
       .catch(e => { setDeleteTarget(null); showNotice(e.message || 'Delete failed', 'error'); });
+  };
+
+  const openEdit = (route) => {
+    setEditForm({
+      label: route.label || '',
+      methods: route.methods || route.method || 'POST',
+      provider: route.provider || 'custom',
+      auth_token: route.auth_token || '',
+      rate_limit: route.rate_limit || '',
+      rate_window: route.rate_window || '',
+      run_mode: route.run_mode || 'async',
+      mapping_id: route.mapping_id ? String(route.mapping_id) : '',
+    });
+    setShowTokenToggle(false);
+    setEditTarget(route);
+  };
+
+  const handleEditSave = () => {
+    setEditSaving(true);
+    apiFetch({ path: `/wrm/v1/routes/${editTarget.slug}`, method: 'PUT', data: editForm })
+      .then(() => {
+        setEditSaving(false);
+        setEditTarget(null);
+        showNotice('Route updated.');
+        loadRoutes();
+      })
+      .catch(e => { setEditSaving(false); showNotice(e.message || 'Update failed', 'error'); });
   };
 
   const copyWebhookUrl = (route) => {
@@ -198,6 +229,14 @@ export default function RoutesPage() {
                     {route.status === 'active' ? 'Pause' : 'Resume'}
                   </Button>
                   <Button
+                    variant="secondary"
+                    isSmall
+                    onClick={() => openEdit(route)}
+                    style={{ marginRight: 6 }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
                     variant="link"
                     isDestructive
                     isSmall
@@ -221,6 +260,41 @@ export default function RoutesPage() {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="primary" isDestructive onClick={handleDelete}>Delete</Button>
+          </div>
+        </Modal>
+      )}
+
+      {editTarget && (
+        <Modal
+          title={`Edit Route: ${editTarget.slug}`}
+          onRequestClose={() => setEditTarget(null)}
+          style={{ maxWidth: 720 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+            <TextControl label="Label" value={editForm.label} onChange={v => setEditForm(f => ({ ...f, label: v }))} />
+            <SelectControl label="Method" value={editForm.methods} options={METHODS} onChange={v => setEditForm(f => ({ ...f, methods: v }))} />
+            <SelectControl label="Provider" value={editForm.provider} options={PROVIDERS} onChange={v => setEditForm(f => ({ ...f, provider: v }))} />
+            <div>
+              <TextControl
+                label="Auth Token"
+                value={editForm.auth_token}
+                onChange={v => setEditForm(f => ({ ...f, auth_token: v }))}
+                type={showTokenToggle ? 'text' : 'password'}
+              />
+              <Button variant="link" isSmall onClick={() => setShowTokenToggle(s => !s)} style={{ marginTop: -8 }}>
+                {showTokenToggle ? '🙈 Hide' : '👁 Show'}
+              </Button>
+            </div>
+            <TextControl label="Rate Limit" value={editForm.rate_limit} onChange={v => setEditForm(f => ({ ...f, rate_limit: v }))} type="number" />
+            <TextControl label="Rate Window (s)" value={editForm.rate_window} onChange={v => setEditForm(f => ({ ...f, rate_window: v }))} type="number" />
+            <SelectControl label="Run Mode" value={editForm.run_mode} options={RUN_MODES} onChange={v => setEditForm(f => ({ ...f, run_mode: v }))} />
+            <SelectControl label="Mapping" value={editForm.mapping_id} options={mappingOptions} onChange={v => setEditForm(f => ({ ...f, mapping_id: v }))} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <Button variant="secondary" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleEditSave} disabled={editSaving}>
+              {editSaving ? <Spinner /> : 'Save Changes'}
+            </Button>
           </div>
         </Modal>
       )}

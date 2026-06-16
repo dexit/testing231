@@ -1,5 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, SelectControl, Notice, Spinner, CheckboxControl } from '@wordpress/components';
+import { Button, SelectControl, TextControl, Notice, Spinner, CheckboxControl } from '@wordpress/components';
 import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 
@@ -25,6 +25,10 @@ export default function JobsPage() {
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
   const [filterRoute, setFilterRoute] = useState('');
+  const [search, setSearch] = useState('');
+
+  // Expanded errors
+  const [expandedErrors, setExpandedErrors] = useState({});
 
   // Auto-refresh
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -45,6 +49,7 @@ export default function JobsPage() {
     params.set('page', page);
     if (filterStatus) params.set('status', filterStatus);
     if (filterRoute) params.set('route_slug', filterRoute);
+    if (search) params.set('search', search);
 
     apiFetch({ path: `/wrm/v1/jobs?${params.toString()}` })
       .then(data => {
@@ -55,7 +60,7 @@ export default function JobsPage() {
         setLoading(false);
       })
       .catch(e => { setError(e.message || 'Failed to load jobs'); setLoading(false); });
-  }, [page, filterStatus, filterRoute]);
+  }, [page, filterStatus, filterRoute, search]);
 
   const loadStats = useCallback(() => {
     apiFetch({ path: '/wrm/v1/jobs/stats' })
@@ -165,6 +170,12 @@ export default function JobsPage() {
           options={routeOptions}
           onChange={v => { setFilterRoute(v); setPage(1); }}
         />
+        <TextControl
+          label="Search"
+          value={search}
+          placeholder="error message or route"
+          onChange={v => { setSearch(v); setPage(1); }}
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <CheckboxControl
             label="Auto-refresh (5s)"
@@ -229,8 +240,18 @@ export default function JobsPage() {
                   <td>{job.duration_ms !== undefined ? `${job.duration_ms}ms` : '—'}</td>
                   <td style={{ fontSize: 12 }}>{job.queued_at || job.created_at || '—'}</td>
                   <td style={{ fontSize: 12 }}>{job.finished_at || '—'}</td>
-                  <td style={{ fontSize: 11, color: '#d63638', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {job.error_message ? job.error_message.substring(0, 80) + (job.error_message.length > 80 ? '…' : '') : '—'}
+                  <td style={{ fontSize: 11, color: '#d63638', maxWidth: 200 }}>
+                    {job.error_message ? (
+                      <span
+                        onClick={() => setExpandedErrors(prev => ({ ...prev, [job.id]: !prev[job.id] }))}
+                        style={{ cursor: 'pointer' }}
+                        title={expandedErrors[job.id] ? undefined : job.error_message}
+                      >
+                        {expandedErrors[job.id]
+                          ? job.error_message
+                          : job.error_message.substring(0, 80) + (job.error_message.length > 80 ? '…' : '')}
+                      </span>
+                    ) : '—'}
                   </td>
                   <td>
                     {(job.status === 'failed' || job.status === 'dead') && (

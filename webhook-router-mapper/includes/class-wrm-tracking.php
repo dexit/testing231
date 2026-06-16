@@ -385,6 +385,12 @@ class WRM_Tracking {
 			$where   .= ' AND status = %s';
 			$params[] = sanitize_key( $args['status'] );
 		}
+		if ( ! empty( $args['search'] ) ) {
+			$where   .= ' AND (recipient LIKE %s OR subject LIKE %s)';
+			$like     = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
+			$params[] = $like;
+			$params[] = $like;
+		}
 		$params[] = $per_page;
 		$params[] = $offset;
 

@@ -543,6 +543,11 @@ class WRM_Job_Queue {
 			$where   .= ' AND route_slug = %s';
 			$params[] = sanitize_title( $args['route_slug'] );
 		}
+		if ( ! empty( $args['search'] ) ) {
+			$where   .= ' AND (error_message LIKE %s OR route_slug LIKE %s)';
+			$params[] = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
+			$params[] = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
+		}
 
 		$params[] = $per_page;
 		$params[] = $offset;

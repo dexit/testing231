@@ -104,6 +104,10 @@ class WRM_Logger {
 			$where   .= ' AND ref_id = %d';
 			$params[] = (int) $args['ref_id'];
 		}
+		if ( ! empty( $args['search'] ) ) {
+			$where   .= ' AND message LIKE %s';
+			$params[] = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
+		}
 
 		$params[] = $per_page;
 		$params[] = $offset;

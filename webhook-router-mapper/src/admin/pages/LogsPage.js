@@ -1,5 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, SelectControl, Notice, Spinner, Modal } from '@wordpress/components';
+import { Button, SelectControl, TextControl, Notice, Spinner, Modal } from '@wordpress/components';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 import JsonTree from '../components/JsonTree';
@@ -26,6 +26,7 @@ export default function LogsPage() {
   // Filters
   const [filterLevel, setFilterLevel] = useState('');
   const [filterContext, setFilterContext] = useState('');
+  const [search, setSearch] = useState('');
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -45,6 +46,7 @@ export default function LogsPage() {
     params.set('page', page);
     if (filterLevel) params.set('level', filterLevel);
     if (filterContext) params.set('context', filterContext);
+    if (search) params.set('search', search);
 
     apiFetch({ path: `/wrm/v1/logs?${params.toString()}` })
       .then(data => {
@@ -63,7 +65,7 @@ export default function LogsPage() {
         setLoading(false);
       })
       .catch(e => { setError(e.message || 'Failed to load logs'); setLoading(false); });
-  }, [page, filterLevel, filterContext]);
+  }, [page, filterLevel, filterContext, search]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
 
@@ -145,6 +147,12 @@ export default function LogsPage() {
           value={filterContext}
           options={contextOptions}
           onChange={v => { setFilterContext(v); setPage(1); }}
+        />
+        <TextControl
+          label="Search"
+          value={search}
+          onChange={v => { setSearch(v); setPage(1); }}
+          placeholder="message text"
         />
         <Button variant="secondary" onClick={loadLogs}>Refresh</Button>
         <Button variant="secondary" isDestructive onClick={() => setShowPurgeConfirm(true)}>
