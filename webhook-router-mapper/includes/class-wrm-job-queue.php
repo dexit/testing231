@@ -18,9 +18,9 @@ class WRM_Job_Queue {
 	// Constants
 	// -------------------------------------------------------------------------
 
-	const BATCH_SIZE   = 5;
-	const MAX_ATTEMPTS = 3;
-	const RETRY_DELAYS = array( 2, 10, 30 ); // minutes per attempt (0-indexed)
+	const int   BATCH_SIZE   = 5;
+	const int   MAX_ATTEMPTS = 3;
+	const array RETRY_DELAYS = array( 2, 10, 30 ); // minutes per attempt (0-indexed)
 
 	// -------------------------------------------------------------------------
 	// Bootstrap
@@ -50,6 +50,33 @@ class WRM_Job_Queue {
 			);
 		}
 		return $schedules;
+	}
+
+	/**
+	 * Fire a non-blocking loopback HTTP request to wp-cron.php to trigger
+	 * WP-Cron processing immediately without waiting for a site visitor.
+	 *
+	 * This is the same pattern WooCommerce uses in WC_Background_Process::dispatch().
+	 * The request is intentionally non-blocking (timeout 0.01 s) so it returns
+	 * instantly. SSL verification is disabled to avoid self-signed cert failures
+	 * on local/staging environments.
+	 */
+	private static function spawn_cron(): void {
+		if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+			return; // Already inside a cron run — no need to re-spawn.
+		}
+
+		$url = site_url( 'wp-cron.php?doing_wp_cron=' . sprintf( '%.22F', microtime( true ) ) );
+
+		wp_remote_get(
+			$url,
+			array(
+				'blocking'   => false,
+				'sslverify'  => apply_filters( 'https_local_ssl_verify', false ),
+				'timeout'    => 0.01,
+				'user-agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ),
+			)
+		);
 	}
 
 	/**
@@ -107,8 +134,11 @@ class WRM_Job_Queue {
 
 		$job_id = (int) $wpdb->insert_id;
 
-		// Fire a single event 5 seconds out so the job runs even if sweep is
-		// not yet scheduled (e.g. right after activation).
+		// Async loopback — non-blocking HTTP request to wp-cron.php so the job
+		// fires within seconds even on low-traffic sites (WooCommerce pattern).
+		self::spawn_cron();
+
+		// Also register a single-event fallback in case the loopback is blocked.
 		wp_schedule_single_event( time() + 5, 'wrm_process_job', array( $job_id ) );
 
 		WRM_Logger::info(
@@ -131,41 +161,55 @@ class WRM_Job_Queue {
 
 	/**
 	 * Pick up pending jobs whose retry time has arrived and process each one.
+	 *
+	 * A transient-based mutex (2-minute TTL) prevents concurrent sweep runs on
+	 * object-cache installs where multiple requests may fire WP-Cron simultaneously.
 	 */
 	public static function sweep(): void {
 		global $wpdb;
 
-		$table = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
-		$now   = current_time( 'mysql' );
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$jobs = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT id FROM {$table}
-				 WHERE status IN ('queued','failed')
-				   AND next_retry_at <= %s
-				 ORDER BY id ASC
-				 LIMIT %d",
-				$now,
-				self::BATCH_SIZE
-			),
-			ARRAY_A
-		);
-
-		if ( empty( $jobs ) ) {
+		// Mutex: bail if another sweep is already running.
+		$lock_key = 'wrm_sweep_lock';
+		if ( get_transient( $lock_key ) ) {
 			return;
 		}
+		set_transient( $lock_key, 1, 120 );
 
-		$count = count( $jobs );
+		try {
+			$table = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
+			$now   = current_time( 'mysql' );
 
-		WRM_Logger::debug(
-			'queue',
-			"Sweep: processing {$count} job(s).",
-			array( 'ref_id' => 0 )
-		);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$jobs = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT id FROM {$table}
+					 WHERE status IN ('queued','failed')
+					   AND next_retry_at <= %s
+					 ORDER BY id ASC
+					 LIMIT %d",
+					$now,
+					self::BATCH_SIZE
+				),
+				ARRAY_A
+			);
 
-		foreach ( $jobs as $job ) {
-			self::process( (int) $job['id'] );
+			if ( empty( $jobs ) ) {
+				return;
+			}
+
+			$count = count( $jobs );
+
+			WRM_Logger::debug(
+				'queue',
+				"Sweep: processing {$count} job(s).",
+				array( 'ref_id' => 0 )
+			);
+
+			foreach ( $jobs as $job ) {
+				self::process( (int) $job['id'] );
+			}
+		} finally {
+			delete_transient( $lock_key );
 		}
 	}
 

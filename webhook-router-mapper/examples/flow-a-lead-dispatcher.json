@@ -1,0 +1,34 @@
+{
+  "_name": "Flow A — Lead Intake + Dispatcher",
+  "_description": "Payload -> CPT 'lead' (created/updated) -> dispatcher signs and POSTs to CRM. Paste the object below (without _-prefixed keys) into the mapping's wrm_config.",
+  "cpt": "lead",
+  "post_status": "publish",
+  "update_existing": true,
+  "match_source": "contact.email",
+  "match_field": "meta:email",
+  "fields": [
+    { "source": "contact.name",  "target": "post_title" },
+    { "source": "message",        "target": "post_content" },
+    { "source": "contact.email",  "target": "meta:email" },
+    { "source": "contact.phone",  "target": "meta:phone" },
+    { "source": "source",         "target": "taxonomy:lead_source" }
+  ],
+  "chains": [
+    {
+      "type": "dispatcher",
+      "url": "https://hooks.crm.example.com/inbound",
+      "method": "POST",
+      "timeout": 15,
+      "signing_secret": "whsec_live_REPLACE_ME",
+      "headers": { "X-Source": "wrm" },
+      "body_builder": {
+        "event": "lead.created",
+        "post_id": "{{post.id}}",
+        "name": "{{payload.contact.name}}",
+        "email": "{{payload.contact.email}}",
+        "phone": "{{payload.contact.phone}}",
+        "received_at": "{{datetime}}"
+      }
+    }
+  ]
+}

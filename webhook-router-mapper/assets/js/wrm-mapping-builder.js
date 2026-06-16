@@ -19,6 +19,9 @@
 	let _uid = 0;
 	const uid  = ()  => ++_uid;
 	const esc  = (s) => $('<div>').text(String(s ?? '')).html();
+	// Mirror WP sanitize_key(): lowercase, allow a-z0-9_- only. Keeps the saved
+	// config in sync with what the PHP stores so meta_json keys round-trip.
+	const sanitizeKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
 	const i18n = (window.wrmData && window.wrmData.i18n) ? window.wrmData.i18n : {};
 	const t    = (key, fallback) => i18n[key] || fallback;
 
@@ -364,14 +367,18 @@
 	 * Field:
 	 *   { source, target, loop, loop_type, loop_template, loop_join }
 	 *
-	 * Chain (webhook):
-	 *   { type, url, method, timeout, headers{}, body_builder }
+	 * Chain (webhook / dispatcher):
+	 *   { type, url, method, timeout, headers{}, signing_secret, body_builder }
+	 * Chain (email):
+	 *   { type, to, subject, format(text|html|mjml), body_template, mjml_source, cc, bcc, track }
+	 * Chain (sms):
+	 *   { type, provider(twilio|whatsapp|sinch|messagemedia|webhook), to, from, body, track, ...creds }
 	 * Chain (action):
 	 *   { type, hook }
 	 * Chain (function):
 	 *   { type, function }
 	 * Chain (mapping):
-	 *   { type, mapping_id }
+	 *   { type, mapping_id, chain_source, chain_source_key }
 	 * ==================================================================== */
 
 	WRM.MappingBuilder = (function () {
@@ -542,13 +549,17 @@
 
 		function _targetSelector (field) {
 			let tType = 'post_field', tKey = field.target || 'post_title';
-			if (tKey.startsWith('meta:'))     { tType = 'meta';     tKey = tKey.slice(5); }
+			if (tKey.startsWith('meta_json:'))  { tType = 'meta_json'; tKey = tKey.slice(10); }
+			else if (tKey.startsWith('meta:'))  { tType = 'meta';      tKey = tKey.slice(5); }
 			else if (tKey.startsWith('taxonomy:')) { tType = 'taxonomy'; tKey = tKey.slice(9); }
+
+			const PREFIX = { post_field: '', meta: 'meta:', meta_json: 'meta_json:', taxonomy: 'taxonomy:' };
 
 			const $wrap    = $('<div class="wrm-target-sel">');
 			const $typesel = $('<select class="wrm-tgt-type">').append(
 				$('<option value="post_field">Post field</option>'),
 				$('<option value="meta">Post meta (meta:key)</option>'),
+				$('<option value="meta_json">Meta JSON (meta_json:key)</option>'),
 				$('<option value="taxonomy">Taxonomy (taxonomy:name)</option>')
 			).val(tType);
 
@@ -560,8 +571,10 @@
 
 			function commit () {
 				const tt = $typesel.val();
-				const tk = tt === 'post_field' ? $pfsel.val() : $keyinp.val();
-				field.target = tt === 'post_field' ? tk : (tt + ':' + tk);
+				// Key-based targets (meta/meta_json/taxonomy) are sanitized server-side
+				// with sanitize_key(); normalize here so the saved config matches storage.
+				const tk = tt === 'post_field' ? $pfsel.val() : sanitizeKey($keyinp.val());
+				field.target = (PREFIX[tt] || '') + tk;
 				_save();
 			}
 			$typesel.on('change', function () {
@@ -572,6 +585,10 @@
 			});
 			$pfsel.on('change',  commit);
 			$keyinp.on('input',  commit);
+			// Reflect the sanitized key back into the field once focus leaves.
+			$keyinp.on('blur', function () {
+				if ($typesel.val() !== 'post_field') { $(this).val(sanitizeKey($(this).val())); }
+			});
 
 			return $wrap.append($typesel).append($pfsel).append($keyinp);
 		}
@@ -582,8 +599,8 @@
 			_state.chains.forEach((c) => $list.append(_chainItem(c)));
 
 			const $addRow = $('<div class="wrm-add-chain-row">');
-			['webhook', 'action', 'function', 'mapping'].forEach(type => {
-				const icons = { webhook: '🔗', action: '⚡', function: '⚙', mapping: '🗺' };
+			['webhook', 'dispatcher', 'email', 'sms', 'action', 'function', 'mapping'].forEach(type => {
+				const icons = { webhook: '🔗', dispatcher: '📡', email: '✉', sms: '💬', action: '⚡', function: '⚙', mapping: '🗺' };
 				$addRow.append(
 					$('<button type="button" class="button wrm-add-chain-btn">').text(icons[type] + ' ' + type)
 						.on('click', function () {
@@ -601,16 +618,19 @@
 		function _newChain (type) {
 			const base = { type, _uid: uid() };
 			const defaults = {
-				webhook:  { url: '', method: 'POST', timeout: 15, headers: {}, body_builder: null },
-				action:   { hook: '' },
-				function: { function: '' },
-				mapping:  { mapping_id: 0 }
+				webhook:    { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
+				dispatcher: { url: '', method: 'POST', timeout: 15, headers: {}, signing_secret: '', body_builder: null },
+				email:      { to: '', subject: '', format: 'html', body_template: '', mjml_source: '', cc: '', bcc: '', track: true },
+				sms:        { provider: 'twilio', to: '', from: '', body: '', track: true, account_sid: '', auth_token: '', phone_number_id: '', access_token: '', api_version: 'v19.0', service_plan_id: '', api_token: '', api_key: '', api_secret: '', url: '', signing_secret: '' },
+				action:     { hook: '' },
+				function:   { function: '' },
+				mapping:    { mapping_id: 0, chain_source: 'payload', chain_source_key: '' }
 			};
 			return Object.assign(base, defaults[type] || {});
 		}
 
 		function _chainItem (chain) {
-			const icons = { webhook: '🔗', action: '⚡', function: '⚙', mapping: '🗺' };
+			const icons = { webhook: '🔗', dispatcher: '📡', email: '✉', sms: '💬', action: '⚡', function: '⚙', mapping: '🗺' };
 			const $item = $('<div class="wrm-chain-item">').attr('data-uid', chain._uid);
 
 			const $hdr = $('<div class="wrm-chain-hdr">').append(
@@ -629,7 +649,7 @@
 			);
 
 			const $body = $('<div class="wrm-chain-body">');
-			const renderers = { webhook: _chainWebhook, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
+			const renderers = { webhook: _chainWebhook, dispatcher: _chainWebhook, email: _chainEmail, sms: _chainSms, action: _chainAction, function: _chainFunction, mapping: _chainMapping };
 			(renderers[chain.type] || (() => $('<p>Unknown type</p>')))(chain, $body);
 
 			return $item.append($hdr).append($body);
@@ -647,6 +667,10 @@
 				),
 				_frow('Timeout (s)',
 					$('<input type="number" min="1" max="60" class="small-text">').val(chain.timeout || 15).on('input', function () { chain.timeout = parseInt($(this).val(), 10) || 15; _save(); })
+				),
+				_frow('Signing Secret',
+					$('<input type="text" class="widefat" placeholder="Leave blank to skip outbound HMAC signing">').val(chain.signing_secret || '').on('input', function () { chain.signing_secret = $(this).val(); _save(); }),
+					'When set, adds <code>X-WRM-Signature: sha256=&lt;hmac&gt;</code> to the request.'
 				)
 			);
 
@@ -697,6 +721,122 @@
 				'Visually construct the outgoing JSON payload. Use {{payload.field}} for merge tags. Supports nested objects, static arrays, and loop arrays.'));
 		}
 
+		// Shared: a text input with a merge-tag picker button.
+		function _tagInput (chain, key, placeholder) {
+			const $inp = $('<input type="text" class="widefat">').val(chain[key] || '').attr('placeholder', placeholder || '');
+			$inp.on('input', function () { chain[key] = $(this).val(); _save(); });
+			const $tag = $('<button type="button" class="button-link wrm-tag-btn" title="Insert merge tag">◉</button>');
+			$tag.on('click', function () { WRM.Tags.showPicker($inp[0], $inp); });
+			return $('<div class="wrm-input-btn">').append($inp, $tag);
+		}
+		function _textInput (chain, key, placeholder, type) {
+			return $('<input class="widefat">').attr('type', type || 'text').attr('placeholder', placeholder || '')
+				.val(chain[key] || '').on('input', function () { chain[key] = $(this).val(); _save(); });
+		}
+
+		function _chainEmail (chain, $body) {
+			$body.append(
+				_frow('To', _tagInput(chain, 'to', '{{payload.email}}')),
+				_frow('Subject', _tagInput(chain, 'subject', 'New submission: {{payload.name}}'))
+			);
+
+			// Format selector switches between the plain/HTML body and MJML source.
+			const $bodyRow = _frow('Body',
+				(function () {
+					const $ta = $('<textarea class="widefat" rows="6" placeholder="Hi {{payload.name}}, ...">').val(chain.body_template || '');
+					$ta.on('input', function () { chain.body_template = $(this).val(); _save(); });
+					return $ta;
+				})(),
+				'Supports merge tags. Choose HTML to send text/html.'
+			);
+			const $mjmlRow = _frow('MJML source',
+				(function () {
+					const $ta = $('<textarea class="widefat code" rows="10" placeholder="<mjml><mj-body><mj-section><mj-column><mj-text>Hi {{payload.name}}</mj-text></mj-column></mj-section></mj-body></mjml>">').val(chain.mjml_source || '');
+					$ta.on('input', function () { chain.mjml_source = $(this).val(); _save(); });
+					return $ta;
+				})(),
+				'Compiled to responsive HTML (via the MJML API or the <code>wrm_render_mjml</code> filter; falls back to a safe responsive wrapper).'
+			);
+
+			const fmt = chain.format || (chain.html ? 'html' : 'text');
+			const applyFormat = (f) => {
+				$bodyRow.toggle(f === 'text' || f === 'html');
+				$mjmlRow.toggle(f === 'mjml');
+			};
+			$body.append(_frow('Format',
+				$('<select>').append(
+					$('<option value="text">Plain text</option>'),
+					$('<option value="html">HTML</option>'),
+					$('<option value="mjml">MJML → responsive HTML</option>')
+				).val(fmt).on('change', function () { chain.format = $(this).val(); applyFormat(chain.format); _save(); })
+			));
+			$body.append($bodyRow, $mjmlRow);
+			applyFormat(fmt);
+
+			$body.append(
+				_frow('Cc (optional)', _tagInput(chain, 'cc', '')),
+				_frow('Bcc (optional)', _tagInput(chain, 'bcc', '')),
+				_frow('Tracking',
+					$('<label class="wrm-toggle">').append(
+						$('<input type="checkbox">').prop('checked', chain.track !== false).on('change', function () { chain.track = $(this).is(':checked'); _save(); }),
+						' Track opens & clicks (injects a pixel and rewrites links in HTML/MJML emails)'
+					)
+				)
+			);
+		}
+
+		// Per-provider credential field definitions for the SMS/messaging chain.
+		const SMS_PROVIDERS = {
+			twilio:       { label: 'Twilio',        fields: [['account_sid', 'Account SID', 'ACxxxx', 'text'], ['auth_token', 'Auth Token', '', 'password'], ['from', 'From number', '+15551234567', 'text']] },
+			whatsapp:     { label: 'WhatsApp (Meta Cloud)', fields: [['phone_number_id', 'Phone Number ID', '', 'text'], ['access_token', 'Access Token', '', 'password'], ['api_version', 'Graph API version', 'v19.0', 'text']] },
+			sinch:        { label: 'Sinch',         fields: [['service_plan_id', 'Service Plan ID', '', 'text'], ['api_token', 'API Token', '', 'password'], ['from', 'From', '', 'text']] },
+			messagemedia: { label: 'MessageMedia',  fields: [['api_key', 'API Key', '', 'text'], ['api_secret', 'API Secret', '', 'password']] },
+			webhook:      { label: 'Webhook',       fields: [['url', 'Webhook URL', 'https://...', 'text'], ['signing_secret', 'Signing Secret (optional)', '', 'password']] },
+		};
+
+		function _chainSms (chain, $body) {
+			$body.append(
+				_frow('Provider',
+					$('<select>').append(
+						Object.entries(SMS_PROVIDERS).map(([k, v]) => $('<option>').val(k).text(v.label))
+					).val(chain.provider || 'twilio').on('change', function () {
+						chain.provider = $(this).val();
+						_save();
+						renderProviderFields();
+					}),
+					'Other gateways: return a result array from the <code>wrm_send_message</code> PHP filter.'
+				),
+				_frow('To', _tagInput(chain, 'to', '{{payload.phone}}')),
+				_frow('Message',
+					(function () {
+						const $ta = $('<textarea class="widefat" rows="3" placeholder="Hi {{payload.name}}, ...">').val(chain.body || '');
+						$ta.on('input', function () { chain.body = $(this).val(); _save(); });
+						return $ta;
+					})()
+				)
+			);
+
+			const $creds = $('<div class="wrm-sms-creds">');
+			function renderProviderFields () {
+				$creds.empty();
+				const def = SMS_PROVIDERS[chain.provider || 'twilio'] || SMS_PROVIDERS.twilio;
+				def.fields.forEach(([key, label, ph, type]) => {
+					$creds.append(_frow(label, _textInput(chain, key, ph, type)));
+				});
+			}
+			renderProviderFields();
+			$body.append($creds);
+
+			$body.append(
+				_frow('Tracking',
+					$('<label class="wrm-toggle">').append(
+						$('<input type="checkbox">').prop('checked', chain.track !== false).on('change', function () { chain.track = $(this).is(':checked'); _save(); }),
+						' Track delivery (store message; provider status webhooks update delivered/bounced/failed)'
+					)
+				)
+			);
+		}
+
 		function _chainAction (chain, $body) {
 			$body.append(_frow('WP Action Hook',
 				$('<input type="text" class="widefat" placeholder="my_hook_name">').val(chain.hook || '').on('input', function () { chain.hook = $(this).val(); _save(); }),
@@ -718,7 +858,27 @@
 					maps.forEach(m => $sel.append($('<option>').val(m.id).text(m.title).prop('selected', parseInt(m.id) === chain.mapping_id)));
 				}).catch(() => {});
 			$sel.on('change', function () { chain.mapping_id = parseInt($(this).val(), 10); _save(); });
-			$body.append(_frow('Target Mapping', $sel, 'Chains the output payload through another mapping.'));
+
+			const $srcSel = $('<select class="widefat">').append(
+				$('<option value="payload">Original payload</option>'),
+				$('<option value="post_meta_json">Decode JSON from post meta</option>')
+			).val(chain.chain_source || 'payload');
+			const $keyInp = $('<input type="text" class="widefat" placeholder="meta key containing JSON">').val(chain.chain_source_key || '');
+			const $keyRow = _frow('Meta key', $keyInp, 'The post meta key written by a <code>meta_json:</code> target — its JSON value becomes the chained payload.');
+			$keyRow.toggle((chain.chain_source || 'payload') === 'post_meta_json');
+			$srcSel.on('change', function () {
+				chain.chain_source = $(this).val();
+				$keyRow.toggle(chain.chain_source === 'post_meta_json');
+				_save();
+			});
+			$keyInp.on('input', function () { chain.chain_source_key = sanitizeKey($(this).val()); _save(); });
+			$keyInp.on('blur', function () { $(this).val(chain.chain_source_key); });
+
+			$body.append(
+				_frow('Target Mapping', $sel, 'Chains the result through another mapping.'),
+				_frow('Chain Source', $srcSel, 'What payload to pass into the chained mapping.'),
+				$keyRow
+			);
 		}
 
 		/* ---- TAGS PANEL -------------------------------------------------- */

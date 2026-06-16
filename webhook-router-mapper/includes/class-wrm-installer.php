@@ -12,9 +12,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_Installer {
 
-	const ROUTES_TABLE   = 'wrm_routes';
-	const CAPTURES_TABLE = 'wrm_captures';
-	const JOBS_TABLE     = 'wrm_jobs';
+	const string ROUTES_TABLE         = 'wrm_routes';
+	const string CAPTURES_TABLE       = 'wrm_captures';
+	const string JOBS_TABLE           = 'wrm_jobs';
+	const string SCHEDULES_TABLE      = 'wrm_schedules';
+	const string MESSAGES_TABLE       = 'wrm_messages';
+	const string MESSAGE_EVENTS_TABLE = 'wrm_message_events';
 
 	public static function install(): void {
 		global $wpdb;
@@ -83,6 +86,74 @@ class WRM_Installer {
 			) {$charset};"
 		);
 
+		// Schedules table — timer-driven and URL-triggered mapping runs.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_schedules (
+				id            bigint(20) unsigned  NOT NULL AUTO_INCREMENT,
+				label         varchar(255)         NOT NULL DEFAULT '',
+				mapping_id    bigint(20) unsigned  NOT NULL DEFAULT 0,
+				interval_key  varchar(40)          NOT NULL DEFAULT 'manual',
+				seed_payload  longtext             DEFAULT NULL,
+				source_url    varchar(500)         NOT NULL DEFAULT '',
+				source_method varchar(10)          NOT NULL DEFAULT 'GET',
+				trigger_token varchar(64)          NOT NULL DEFAULT '',
+				run_mode      enum('sync','async') NOT NULL DEFAULT 'async',
+				status        enum('active','paused') NOT NULL DEFAULT 'active',
+				last_run      datetime             DEFAULT NULL,
+				next_run      datetime             DEFAULT NULL,
+				last_result   text                 DEFAULT NULL,
+				created_at    datetime             NOT NULL,
+				PRIMARY KEY (id),
+				KEY status (status),
+				KEY next_run (next_run),
+				KEY trigger_token (trigger_token)
+			) {$charset};"
+		);
+
+		// Messages table — one row per outbound email/SMS/WhatsApp message,
+		// keyed by a tracking token for open/click/deliverability correlation.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_messages (
+				id                  bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				token               varchar(64)         NOT NULL DEFAULT '',
+				channel             varchar(20)         NOT NULL DEFAULT 'email',
+				provider            varchar(40)         NOT NULL DEFAULT '',
+				recipient           varchar(255)        NOT NULL DEFAULT '',
+				subject             varchar(255)        NOT NULL DEFAULT '',
+				mapping_id          bigint(20) unsigned NOT NULL DEFAULT 0,
+				capture_id          bigint(20) unsigned NOT NULL DEFAULT 0,
+				provider_message_id varchar(191)        NOT NULL DEFAULT '',
+				status              varchar(20)         NOT NULL DEFAULT 'queued',
+				open_count          int unsigned        NOT NULL DEFAULT 0,
+				click_count         int unsigned        NOT NULL DEFAULT 0,
+				sent_at             datetime            DEFAULT NULL,
+				first_open_at       datetime            DEFAULT NULL,
+				created_at          datetime            NOT NULL,
+				PRIMARY KEY (id),
+				KEY token (token),
+				KEY channel (channel),
+				KEY status (status),
+				KEY provider_message_id (provider_message_id)
+			) {$charset};"
+		);
+
+		// Message events — append-only deliverability/engagement log per message.
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_message_events (
+				id         bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				message_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				event      varchar(30)         NOT NULL DEFAULT '',
+				url        varchar(500)        NOT NULL DEFAULT '',
+				ip         varchar(45)         NOT NULL DEFAULT '',
+				user_agent varchar(255)        NOT NULL DEFAULT '',
+				data       longtext            DEFAULT NULL,
+				created_at datetime            NOT NULL,
+				PRIMARY KEY (id),
+				KEY message_id (message_id),
+				KEY event (event)
+			) {$charset};"
+		);
+
 		// Logs table
 		dbDelta(
 			"CREATE TABLE {$wpdb->prefix}wrm_logs (
@@ -105,7 +176,46 @@ class WRM_Installer {
 		flush_rewrite_rules();
 	}
 
+	/**
+	 * Run install() on version bump so existing sites pick up new tables/columns
+	 * without needing a manual deactivate/reactivate. Cheap dbDelta is idempotent.
+	 */
+	public static function maybe_upgrade(): void {
+		if ( get_option( 'wrm_db_version' ) !== WRM_DB_VERSION ) {
+			self::install();
+		}
+	}
+
 	public static function register_cpt_and_tax(): void {
+		// WP 6.9+/7.0+ — disable Gutenberg for wrm_mapping so the jQuery
+		// mapping builder meta box remains the primary editing interface.
+		add_filter(
+			'use_block_editor_for_post_type',
+			static function ( bool $use, string $post_type ): bool {
+				return 'wrm_mapping' === $post_type ? false : $use;
+			},
+			10,
+			2
+		);
+
+		// WP 6.9+ REST controller — register the CPT's REST base so the admin
+		// API can link to the WP native endpoint and future tooling can discover it.
+		add_filter(
+			'register_post_type_args',
+			static function ( array $args, string $post_type ): array {
+				if ( 'wrm_mapping' !== $post_type ) {
+					return $args;
+				}
+				// Ensure the REST namespace is set even if show_in_rest is later
+				// enabled by a third-party plugin or site option.
+				$args['rest_base']      = 'wrm-mappings';
+				$args['rest_namespace'] = 'wrm/v1';
+				return $args;
+			},
+			10,
+			2
+		);
+
 		register_taxonomy(
 			'wrm_provider',
 			'wrm_mapping',
@@ -132,7 +242,24 @@ class WRM_Installer {
 				'public'          => false,
 				'show_ui'         => true,
 				'show_in_menu'    => false,
-				'capability_type' => 'post',
+				'capability_type'   => array( 'wrm_mapping', 'wrm_mappings' ),
+				'map_meta_cap'      => true,
+				'capabilities'      => array(
+					'edit_post'              => 'manage_options',
+					'edit_posts'             => 'manage_options',
+					'edit_others_posts'      => 'manage_options',
+					'publish_posts'          => 'manage_options',
+					'read_post'              => 'manage_options',
+					'read_private_posts'     => 'manage_options',
+					'delete_post'            => 'manage_options',
+					'delete_posts'           => 'manage_options',
+					'delete_private_posts'   => 'manage_options',
+					'delete_published_posts' => 'manage_options',
+					'delete_others_posts'    => 'manage_options',
+					'edit_private_posts'     => 'manage_options',
+					'edit_published_posts'   => 'manage_options',
+					'create_posts'           => 'manage_options',
+				),
 				'supports'        => array( 'title', 'revisions' ),
 				'has_archive'     => false,
 				'rewrite'         => false,

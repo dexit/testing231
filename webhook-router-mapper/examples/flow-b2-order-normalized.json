@@ -1,0 +1,39 @@
+{
+  "_name": "Flow B (step 2) — Order Normalized + Dispatcher",
+  "_description": "Receives the DECODED 'order' object as its payload (from flow-b1 chain_source=post_meta_json). Flattens to CPT 'order' with custom metas, then dispatcher signs and POSTs to the ERP. Note sources are relative to the order object: id, customer.name, etc.",
+  "cpt": "order",
+  "post_status": "publish",
+  "update_existing": true,
+  "match_source": "id",
+  "match_field": "meta:order_id",
+  "fields": [
+    { "source": "id",             "target": "meta:order_id" },
+    { "source": "customer.name",  "target": "post_title" },
+    { "source": "customer.email", "target": "meta:customer_email" },
+    { "source": "total",          "target": "meta:total_cents" },
+    { "source": "currency",       "target": "meta:currency" },
+    { "source": "items",          "target": "meta_json:line_items" }
+  ],
+  "chains": [
+    {
+      "type": "dispatcher",
+      "url": "https://erp.example.com/api/orders",
+      "method": "POST",
+      "timeout": 20,
+      "signing_secret": "whsec_erp_REPLACE_ME",
+      "body_builder": {
+        "order_id": "{{payload.id}}",
+        "wp_post_id": "{{post.id}}",
+        "customer": "{{payload.customer.name}}",
+        "amount_cents": "{{payload.total}}",
+        "currency": "{{payload.currency}}",
+        "line_count": {
+          "__wrm_loop__": true,
+          "source": "items",
+          "template": "1",
+          "join": "ARRAY"
+        }
+      }
+    }
+  ]
+}
