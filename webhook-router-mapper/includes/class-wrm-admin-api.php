@@ -580,6 +580,9 @@ class WRM_Admin_API {
 			return new WP_REST_Response( array( 'error' => 'Route not found.' ), 404 );
 		}
 
+		$data['ip_allowlist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_allowlist' ) ?? '' ) );
+		$data['ip_blocklist']  = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' )  ?? '' ) );
+
 		WRM_Router::update_route( $slug, $data );
 
 		WRM_Logger::info( 'admin', "Route updated: {$slug}.", array( 'ref_id' => (int) $existing['id'] ) );
