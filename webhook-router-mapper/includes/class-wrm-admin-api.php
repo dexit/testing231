@@ -450,6 +450,19 @@ class WRM_Admin_API {
 		);
 
 		// -----------------------------------------------------------------
+		// Demo data seeder
+		// -----------------------------------------------------------------
+		register_rest_route(
+			$ns,
+			'/demo/seed',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'demo_seed' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// -----------------------------------------------------------------
 		// Dashboard
 		// -----------------------------------------------------------------
 		register_rest_route(
@@ -1268,6 +1281,27 @@ class WRM_Admin_API {
 		) ?? array();
 
 		return new WP_REST_Response( $rows, 200 );
+	}
+
+	// -------------------------------------------------------------------------
+	// Demo seeder handler
+	// -------------------------------------------------------------------------
+
+	public static function demo_seed( WP_REST_Request $req ): WP_REST_Response {
+		$results = WRM_Demo::seed();
+		$total   = array_sum(
+			array_column(
+				array_filter( $results, 'is_array' ),
+				'inserted'
+			)
+		);
+		return new WP_REST_Response(
+			array(
+				'message' => "Demo data seeded — {$total} items inserted across routes, mappings, captures, jobs, schedules, messages, metrics, and logs.",
+				'details' => $results,
+			),
+			200
+		);
 	}
 
 	// -------------------------------------------------------------------------

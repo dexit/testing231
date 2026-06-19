@@ -51,13 +51,24 @@ class WRM_Admin {
 				'webhook-router_page_wrm-functions' => 'functions',
 				'webhook-router_page_wrm-messages'  => 'messages',
 			);
+			$initial_tab = $tab_map[ $hook ] ?? 'routes';
+			// Show Get Started for fresh installs with no routes yet.
+			if ( 'routes' === $initial_tab ) {
+				global $wpdb;
+				$routes_table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$route_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$routes_table}" );
+				if ( 0 === $route_count ) {
+					$initial_tab = 'start';
+				}
+			}
 			wp_localize_script(
 				'wrm-admin-app',
 				'wrmAdminData',
 				array(
 					'apiRoot'    => esc_url_raw( rest_url() ),
 					'nonce'      => wp_create_nonce( 'wp_rest' ),
-					'initialTab' => $tab_map[ $hook ] ?? 'routes',
+					'initialTab' => $initial_tab,
 					'restBase'   => rest_url( 'wrm/v1' ),
 				)
 			);
