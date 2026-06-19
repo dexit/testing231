@@ -1,5 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Spinner, Notice } from '@wordpress/components';
+import { Button, Spinner, Notice } from '@wordpress/components';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 
@@ -14,27 +14,48 @@ const CHAIN_ICONS = {
   mapping: '🔀',
 };
 
+const REFRESH_SEC = 30;
+
+function formatApiError(e) {
+  const msg = e?.message || '';
+  if (e?.code === 'rest_forbidden' || /forbidden|not allowed|403/i.test(msg)) {
+    return 'Access denied — you need administrator (manage_options) capability to view this.';
+  }
+  return msg || 'Failed to load dashboard';
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [countdown, setCountdown] = useState(REFRESH_SEC);
   const intervalRef = useRef(null);
+  const countRef = useRef(null);
 
   const load = () => {
+    setLoading(prev => prev || true);
     apiFetch({ path: '/wrm/v1/dashboard' })
-      .then(d => { setData(d); setLoading(false); setError(null); })
-      .catch(e => { setError(e.message || 'Failed to load dashboard'); setLoading(false); });
+      .then(d => { setData(d); setLoading(false); setError(null); setCountdown(REFRESH_SEC); })
+      .catch(e => { setError(formatApiError(e)); setLoading(false); });
   };
 
   useEffect(() => {
     load();
-    intervalRef.current = setInterval(load, 30000);
-    return () => clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(load, REFRESH_SEC * 1000);
+    countRef.current = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    return () => { clearInterval(intervalRef.current); clearInterval(countRef.current); };
   }, []);
 
-  if (loading) return <Spinner />;
-  if (error) return <Notice status="error" isDismissible={false}>{error}</Notice>;
-  if (!data) return null;
+  if (loading && !data) return <Spinner />;
+  if (error && !data) {
+    return (
+      <div style={{ padding: '16px 0' }}>
+        <Notice status="error" isDismissible={false}>{error}</Notice>
+        <Button variant="secondary" onClick={load} style={{ marginTop: 12 }}>Retry</Button>
+      </div>
+    );
+  }
+  if (!data) return <Notice status="warning" isDismissible={false}>No data returned from server.</Notice>;
 
   const { stats = {}, pipelines = [], recent_failures = [], recent_errors = [] } = data;
   const jobs = stats.jobs || {};
@@ -50,6 +71,12 @@ export default function DashboardPage() {
 
   return (
     <div className="wrm-page wrm-dashboard-page">
+      {error && <Notice status="warning" isDismissible={false} style={{ marginBottom: 12 }}>{error} (showing cached data)</Notice>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {loading && <Spinner />}
+        <span style={{ fontSize: 12, color: '#888' }}>Auto-refresh in {countdown}s</span>
+        <Button variant="link" isSmall onClick={load}>Refresh now</Button>
+      </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
         {statPills.map(({ label, value, bg, color }) => (
           <div key={label} style={{ padding: '10px 18px', borderRadius: 8, background: bg, color, fontWeight: 700, fontSize: 13, minWidth: 100, textAlign: 'center' }}>

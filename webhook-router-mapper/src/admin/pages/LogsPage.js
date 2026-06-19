@@ -64,7 +64,13 @@ export default function LogsPage() {
 
         setLoading(false);
       })
-      .catch(e => { setError(e.message || 'Failed to load logs'); setLoading(false); });
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load logs');
+        setLoading(false);
+      });
   }, [page, filterLevel, filterContext, search]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
@@ -180,7 +186,15 @@ export default function LogsPage() {
             </thead>
             <tbody>
               {logs.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#888' }}>No logs found.</td></tr>
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {search
+                      ? <>No logs matching <strong>"{search}"</strong>.</>
+                      : filterLevel
+                        ? <>No <strong>{filterLevel}</strong> logs found.</>
+                        : 'No logs yet — activity will appear here as routes run.'}
+                  </td>
+                </tr>
               )}
               {logs.map(log => (
                 <>

@@ -69,7 +69,13 @@ export default function CapturesPage() {
         setTotal(data.total || list.length);
         setLoading(false);
       })
-      .catch(e => { setError(e.message || 'Failed to load captures'); setLoading(false); });
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load captures');
+        setLoading(false);
+      });
   }, [page, filterRoute, filterProvider, filterMapped]);
 
   useEffect(() => {
@@ -216,7 +222,13 @@ export default function CapturesPage() {
             </thead>
             <tbody>
               {captures.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>No captures found.</td></tr>
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {filterRoute
+                      ? <>No captures for route <strong>{filterRoute}</strong>.</>
+                      : 'No captures yet — POST a webhook to an active route to see it here.'}
+                  </td>
+                </tr>
               )}
               {captures.map(cap => (
                 <tr key={cap.id}>

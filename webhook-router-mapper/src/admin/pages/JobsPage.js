@@ -59,7 +59,13 @@ export default function JobsPage() {
         setTotal(tot);
         setLoading(false);
       })
-      .catch(e => { setError(e.message || 'Failed to load jobs'); setLoading(false); });
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load jobs');
+        setLoading(false);
+      });
   }, [page, filterStatus, filterRoute, search]);
 
   const loadStats = useCallback(() => {
@@ -220,7 +226,15 @@ export default function JobsPage() {
             </thead>
             <tbody>
               {jobs.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#888' }}>No jobs found.</td></tr>
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {search
+                      ? <>No jobs matching <strong>"{search}"</strong>.</>
+                      : filterStatus
+                        ? <>No <strong>{filterStatus}</strong> jobs found.</>
+                        : 'No jobs yet — they appear here once routes start processing.'}
+                  </td>
+                </tr>
               )}
               {jobs.map(job => (
                 <tr key={job.id}>

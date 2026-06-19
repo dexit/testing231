@@ -35,7 +35,13 @@ export default function MessagesPage() {
     if (search) params.set('search', search);
     apiFetch({ path: `/wrm/v1/messages?${params.toString()}` })
       .then(data => { setMessages(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(e => { setError(e.message || 'Failed to load messages'); setLoading(false); });
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load messages');
+        setLoading(false);
+      });
   }, [page, filterChannel, filterStatus, search]);
 
   const loadStats = useCallback(() => {
@@ -106,7 +112,15 @@ export default function MessagesPage() {
             </thead>
             <tbody>
               {messages.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#888' }}>No messages tracked yet.</td></tr>
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {search
+                      ? <>No messages matching <strong>"{search}"</strong>.</>
+                      : filterStatus
+                        ? <>No <strong>{filterStatus}</strong> messages found.</>
+                        : 'No messages tracked yet — send emails or SMS via a mapped route to see them here.'}
+                  </td>
+                </tr>
               )}
               {messages.map(m => (
                 <tr key={m.id}>
