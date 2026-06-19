@@ -2,6 +2,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { Button, Spinner, Notice } from '@wordpress/components';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
+import Sparkline from '../components/Sparkline';
 
 const CHAIN_ICONS = {
   cpt: '📄',
@@ -67,6 +68,8 @@ export default function DashboardPage() {
     { label: 'Failed Jobs',     value: jobs.failed ?? 0,            bg: (jobs.failed ?? 0) > 0 ? '#fde8e8' : '#f0f0f0', color: (jobs.failed ?? 0) > 0 ? '#7a0000' : '#555' },
     { label: 'Messages Today',  value: stats.messages_today ?? 0,   bg: '#f4e8ff', color: '#450070' },
     { label: 'Errors Today',    value: stats.errors_today ?? 0,     bg: (stats.errors_today ?? 0) > 0 ? '#fde8e8' : '#f0f0f0', color: (stats.errors_today ?? 0) > 0 ? '#7a0000' : '#555' },
+    { label: 'Sig Verified',   value: stats.sig_verified_today ?? 0,  bg: '#d7f0e0', color: '#0a5227' },
+    { label: 'Sig Failed',     value: stats.sig_failed_today   ?? 0,  bg: (stats.sig_failed_today ?? 0) > 0 ? '#fde8e8' : '#f0f0f0', color: (stats.sig_failed_today ?? 0) > 0 ? '#7a0000' : '#555' },
   ];
 
   return (
@@ -137,6 +140,18 @@ export default function DashboardPage() {
                   <StatusBadge status={route.status || 'active'} />
                   <span style={{ fontSize: 12, color: '#555' }}>{p.captures_today ?? 0} captures today</span>
                 </span>
+
+                {Array.isArray(p.metrics_24h) && p.metrics_24h.length > 0 && (
+                  <span style={{ marginLeft: 8, opacity: 0.8 }} title="Captures last 24h">
+                    <Sparkline
+                      data={p.metrics_24h.map(b => b.captures || 0)}
+                      width={72}
+                      height={22}
+                      color="#2271b1"
+                      fillColor="#e8f4ff"
+                    />
+                  </span>
+                )}
               </div>
             );
           })}

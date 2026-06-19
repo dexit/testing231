@@ -19,7 +19,8 @@ class WRM_Capture {
 		string $method,
 		string $provider,
 		array $payload,
-		WP_REST_Request $req
+		WP_REST_Request $req,
+		string $sig_status = 'skipped'
 	): int {
 		global $wpdb;
 
@@ -42,6 +43,7 @@ class WRM_Capture {
 				'headers'    => wp_json_encode( $headers ),
 				'source_ip'  => sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' ),
 				'mapped'     => 0,
+				'sig_status' => sanitize_key( $sig_status ),
 				'created_at' => current_time( 'mysql' ),
 			)
 		);

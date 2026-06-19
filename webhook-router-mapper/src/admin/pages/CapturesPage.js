@@ -214,6 +214,7 @@ export default function CapturesPage() {
                 <th>Route</th>
                 <th>Provider</th>
                 <th>Method</th>
+                <th>Sig</th>
                 <th>IP</th>
                 <th>Mapped</th>
                 <th>Created</th>
@@ -223,7 +224,7 @@ export default function CapturesPage() {
             <tbody>
               {captures.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
                     {filterRoute
                       ? <>No captures for route <strong>{filterRoute}</strong>.</>
                       : 'No captures yet — POST a webhook to an active route to see it here.'}
@@ -236,6 +237,15 @@ export default function CapturesPage() {
                   <td><code>{cap.route_slug || '—'}</code></td>
                   <td>{cap.provider || '—'}</td>
                   <td>{cap.method || '—'}</td>
+                  <td>
+                    <span style={{
+                      padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                      background: cap.sig_status === 'verified' ? '#d7f0e0' : cap.sig_status === 'failed' ? '#fde8e8' : '#f0f0f0',
+                      color: cap.sig_status === 'verified' ? '#0a5227' : cap.sig_status === 'failed' ? '#7a0000' : '#888',
+                    }}>
+                      {cap.sig_status === 'verified' ? '✓ verified' : cap.sig_status === 'failed' ? '✗ failed' : '— skip'}
+                    </span>
+                  </td>
                   <td>{cap.source_ip || '—'}</td>
                   <td>{cap.mapped ? <StatusBadge status="done" /> : <StatusBadge status="dead" />}</td>
                   <td style={{ fontSize: 12 }}>{cap.created_at || '—'}</td>
