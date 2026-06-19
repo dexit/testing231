@@ -26,6 +26,7 @@ const RUN_MODES = [
 const emptyForm = {
   slug: '', label: '', methods: 'POST', provider: 'custom',
   auth_token: '', rate_limit: '', rate_window: '', run_mode: 'async', mapping_id: '',
+  ip_allowlist: '', ip_blocklist: '',
 };
 
 export default function RoutesPage() {
@@ -38,6 +39,11 @@ export default function RoutesPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [showTokenToggle, setShowTokenToggle] = useState(false);
+  const [rateUsage, setRateUsage] = useState(null);
 
   const loadRoutes = useCallback(() => {
     setLoading(true);
@@ -83,6 +89,41 @@ export default function RoutesPage() {
     apiFetch({ path: `/wrm/v1/routes/${deleteTarget.slug}`, method: 'DELETE' })
       .then(() => { setDeleteTarget(null); showNotice('Route deleted.'); loadRoutes(); })
       .catch(e => { setDeleteTarget(null); showNotice(e.message || 'Delete failed', 'error'); });
+  };
+
+  const openEdit = (route) => {
+    setEditForm({
+      label: route.label || '',
+      methods: route.methods || route.method || 'POST',
+      provider: route.provider || 'custom',
+      auth_token: route.auth_token || '',
+      rate_limit: route.rate_limit || '',
+      rate_window: route.rate_window || '',
+      run_mode: route.run_mode || 'async',
+      mapping_id: route.mapping_id ? String(route.mapping_id) : '',
+      ip_allowlist: route.ip_allowlist || '',
+      ip_blocklist: route.ip_blocklist || '',
+    });
+    setShowTokenToggle(false);
+    setRateUsage(null);
+    if (route.rate_limit > 0) {
+      apiFetch({ path: `/wrm/v1/routes/${route.slug}/rate-usage` })
+        .then(d => setRateUsage(d))
+        .catch(() => setRateUsage(null));
+    }
+    setEditTarget(route);
+  };
+
+  const handleEditSave = () => {
+    setEditSaving(true);
+    apiFetch({ path: `/wrm/v1/routes/${editTarget.slug}`, method: 'PUT', data: editForm })
+      .then(() => {
+        setEditSaving(false);
+        setEditTarget(null);
+        showNotice('Route updated.');
+        loadRoutes();
+      })
+      .catch(e => { setEditSaving(false); showNotice(e.message || 'Update failed', 'error'); });
   };
 
   const copyWebhookUrl = (route) => {
@@ -134,6 +175,20 @@ export default function RoutesPage() {
             <SelectControl label="Method" value={form.methods} options={METHODS} onChange={v => setForm(f => ({ ...f, methods: v }))} />
             <SelectControl label="Provider" value={form.provider} options={PROVIDERS} onChange={v => setForm(f => ({ ...f, provider: v }))} />
             <TextControl label="Auth Token" value={form.auth_token} onChange={v => setForm(f => ({ ...f, auth_token: v }))} type="password" />
+            <TextControl
+              label="IP Allowlist"
+              value={form.ip_allowlist || ''}
+              onChange={v => setForm(f => ({ ...f, ip_allowlist: v }))}
+              placeholder="e.g. 1.2.3.0/24, 10.0.0.1 (empty = allow all)"
+              help="Comma-separated CIDRs or IPs. If set, only matching IPs can call this route."
+            />
+            <TextControl
+              label="IP Blocklist"
+              value={form.ip_blocklist || ''}
+              onChange={f => setForm(prev => ({ ...prev, ip_blocklist: f }))}
+              placeholder="e.g. 1.2.3.4, 5.6.7.0/24"
+              help="Comma-separated CIDRs or IPs. These IPs are always blocked regardless of allowlist."
+            />
             <TextControl label="Rate Limit" value={form.rate_limit} onChange={v => setForm(f => ({ ...f, rate_limit: v }))} type="number" />
             <TextControl label="Rate Window (s)" value={form.rate_window} onChange={v => setForm(f => ({ ...f, rate_window: v }))} type="number" />
             <SelectControl label="Run Mode" value={form.run_mode} options={RUN_MODES} onChange={v => setForm(f => ({ ...f, run_mode: v }))} />
@@ -198,6 +253,14 @@ export default function RoutesPage() {
                     {route.status === 'active' ? 'Pause' : 'Resume'}
                   </Button>
                   <Button
+                    variant="secondary"
+                    isSmall
+                    onClick={() => openEdit(route)}
+                    style={{ marginRight: 6 }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
                     variant="link"
                     isDestructive
                     isSmall
@@ -221,6 +284,70 @@ export default function RoutesPage() {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="primary" isDestructive onClick={handleDelete}>Delete</Button>
+          </div>
+        </Modal>
+      )}
+
+      {editTarget && (
+        <Modal
+          title={`Edit Route: ${editTarget.slug}`}
+          onRequestClose={() => setEditTarget(null)}
+          style={{ maxWidth: 720 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+            <TextControl label="Label" value={editForm.label} onChange={v => setEditForm(f => ({ ...f, label: v }))} />
+            <SelectControl label="Method" value={editForm.methods} options={METHODS} onChange={v => setEditForm(f => ({ ...f, methods: v }))} />
+            <SelectControl label="Provider" value={editForm.provider} options={PROVIDERS} onChange={v => setEditForm(f => ({ ...f, provider: v }))} />
+            <div>
+              <TextControl
+                label="Auth Token"
+                value={editForm.auth_token}
+                onChange={v => setEditForm(f => ({ ...f, auth_token: v }))}
+                type={showTokenToggle ? 'text' : 'password'}
+              />
+              <Button variant="link" isSmall onClick={() => setShowTokenToggle(s => !s)} style={{ marginTop: -8 }}>
+                {showTokenToggle ? '🙈 Hide' : '👁 Show'}
+              </Button>
+            </div>
+            <TextControl label="Rate Limit" value={editForm.rate_limit} onChange={v => setEditForm(f => ({ ...f, rate_limit: v }))} type="number" />
+            <TextControl label="Rate Window (s)" value={editForm.rate_window} onChange={v => setEditForm(f => ({ ...f, rate_window: v }))} type="number" />
+            <SelectControl label="Run Mode" value={editForm.run_mode} options={RUN_MODES} onChange={v => setEditForm(f => ({ ...f, run_mode: v }))} />
+            <SelectControl label="Mapping" value={editForm.mapping_id} options={mappingOptions} onChange={v => setEditForm(f => ({ ...f, mapping_id: v }))} />
+            <TextControl
+              label="IP Allowlist"
+              value={editForm.ip_allowlist || ''}
+              onChange={v => setEditForm(f => ({ ...f, ip_allowlist: v }))}
+              placeholder="e.g. 1.2.3.0/24, 10.0.0.1 (empty = allow all)"
+              help="Comma-separated CIDRs or IPs. If set, only matching IPs can call this route."
+            />
+            <TextControl
+              label="IP Blocklist"
+              value={editForm.ip_blocklist || ''}
+              onChange={v => setEditForm(f => ({ ...f, ip_blocklist: v }))}
+              placeholder="e.g. 1.2.3.4, 5.6.7.0/24"
+              help="Comma-separated CIDRs or IPs. These IPs are always blocked regardless of allowlist."
+            />
+          </div>
+          {rateUsage && rateUsage.rate_limit > 0 && (
+            <div style={{ background: '#f8f9fa', border: '1px solid #e2e4e7', borderRadius: 4, padding: '8px 12px', marginTop: 8, fontSize: 12 }}>
+              <strong>Rate Usage:</strong> {rateUsage.used} / {rateUsage.rate_limit} requests in current {rateUsage.rate_window}s window
+              <div style={{ height: 6, background: '#e2e4e7', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  borderRadius: 3,
+                  background: rateUsage.pct > 80 ? '#d63638' : rateUsage.pct > 50 ? '#dba617' : '#00a32a',
+                  width: `${Math.min(100, rateUsage.pct)}%`,
+                  transition: 'width 0.3s',
+                }} />
+              </div>
+              {rateUsage.window_reset_at && <span style={{ color: '#888', marginTop: 4, display: 'block' }}>Resets at {rateUsage.window_reset_at} UTC</span>}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <Button variant="secondary" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleEditSave} disabled={editSaving}>
+              {editSaving ? <Spinner /> : 'Save Changes'}
+            </Button>
           </div>
         </Modal>
       )}

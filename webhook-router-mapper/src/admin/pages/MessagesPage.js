@@ -1,5 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, SelectControl, Notice, Spinner, Modal } from '@wordpress/components';
+import { Button, SelectControl, TextControl, Notice, Spinner, Modal } from '@wordpress/components';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 
@@ -18,6 +18,7 @@ export default function MessagesPage() {
   const [error, setError] = useState(null);
   const [filterChannel, setFilterChannel] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const [events, setEvents] = useState(null);
@@ -31,10 +32,17 @@ export default function MessagesPage() {
     params.set('offset', (page - 1) * PER_PAGE);
     if (filterChannel) params.set('channel', filterChannel);
     if (filterStatus) params.set('status', filterStatus);
+    if (search) params.set('search', search);
     apiFetch({ path: `/wrm/v1/messages?${params.toString()}` })
       .then(data => { setMessages(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(e => { setError(e.message || 'Failed to load messages'); setLoading(false); });
-  }, [page, filterChannel, filterStatus]);
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load messages');
+        setLoading(false);
+      });
+  }, [page, filterChannel, filterStatus, search]);
 
   const loadStats = useCallback(() => {
     apiFetch({ path: '/wrm/v1/messages/stats' }).then(d => setStats(d || {})).catch(() => {});
@@ -79,6 +87,7 @@ export default function MessagesPage() {
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
         <SelectControl label="Channel" value={filterChannel} options={channelOptions} onChange={v => { setFilterChannel(v); setPage(1); }} />
         <SelectControl label="Status" value={filterStatus} options={statusOptions} onChange={v => { setFilterStatus(v); setPage(1); }} />
+        <TextControl label="Search" value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="recipient or subject" />
         <Button variant="secondary" onClick={() => { load(); loadStats(); }}>Refresh</Button>
       </div>
 
@@ -103,7 +112,15 @@ export default function MessagesPage() {
             </thead>
             <tbody>
               {messages.length === 0 && (
-                <tr><td colSpan={10} style={{ textAlign: 'center', color: '#888' }}>No messages tracked yet.</td></tr>
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {search
+                      ? <>No messages matching <strong>"{search}"</strong>.</>
+                      : filterStatus
+                        ? <>No <strong>{filterStatus}</strong> messages found.</>
+                        : 'No messages tracked yet — send emails or SMS via a mapped route to see them here.'}
+                  </td>
+                </tr>
               )}
               {messages.map(m => (
                 <tr key={m.id}>
@@ -111,7 +128,7 @@ export default function MessagesPage() {
                   <td>{m.channel}</td>
                   <td>{m.provider || '—'}</td>
                   <td style={{ fontSize: 12 }}>{m.recipient || '—'}</td>
-                  <td style={{ fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject || '—'}</td>
+                  <td title={m.subject || ''} style={{ fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject || '—'}</td>
                   <td><StatusBadge status={m.status} /></td>
                   <td>{m.open_count ?? 0}</td>
                   <td>{m.click_count ?? 0}</td>

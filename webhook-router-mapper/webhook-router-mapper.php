@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 define( 'WRM_VERSION', '1.0.0' );
 define( 'WRM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WRM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'WRM_DB_VERSION', '1.2' );
+define( 'WRM_DB_VERSION', '1.3' );
 
 spl_autoload_register( static function ( string $class ): void {
 	$map = array(
@@ -35,6 +35,7 @@ spl_autoload_register( static function ( string $class ): void {
 		'WRM_MJML'           => 'includes/class-wrm-mjml.php',
 		'WRM_Tracking'       => 'includes/class-wrm-tracking.php',
 		'WRM_Admin_API'      => 'includes/class-wrm-admin-api.php',
+		'WRM_Metrics'        => 'includes/class-wrm-metrics.php',
 		'WRM_Elementor'      => 'includes/class-wrm-elementor.php',
 		'WRM_Admin'          => 'admin/class-wrm-admin.php',
 		'WRM_Mapping_Editor' => 'admin/class-wrm-mapping-editor.php',

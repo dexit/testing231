@@ -416,6 +416,52 @@ class WRM_Admin_API {
 			)
 		);
 
+		// Route metrics
+		register_rest_route(
+			$ns,
+			'/routes/(?P<slug>[a-z0-9_-]+)/metrics',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'route_metrics' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// Rate usage
+		register_rest_route(
+			$ns,
+			'/routes/(?P<slug>[a-z0-9_-]+)/rate-usage',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'route_rate_usage' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// Log tail
+		register_rest_route(
+			$ns,
+			'/logs/tail',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'tail_logs' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// -----------------------------------------------------------------
+		// Dashboard
+		// -----------------------------------------------------------------
+		register_rest_route(
+			$ns,
+			'/dashboard',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( __CLASS__, 'dashboard' ),
+				'permission_callback' => $cap,
+			)
+		);
+
 		// -----------------------------------------------------------------
 		// Public tracking endpoints (pixel / click / provider status)
 		// -----------------------------------------------------------------
@@ -457,6 +503,7 @@ class WRM_Admin_API {
 			array(
 				'channel'  => sanitize_key( (string) ( $req->get_param( 'channel' ) ?? '' ) ),
 				'status'   => sanitize_key( (string) ( $req->get_param( 'status' ) ?? '' ) ),
+				'search'   => sanitize_text_field( (string) ( $req->get_param( 'search' ) ?? '' ) ),
 				'per_page' => (int) ( $req->get_param( 'per_page' ) ?? 25 ),
 				'offset'   => (int) ( $req->get_param( 'offset' ) ?? 0 ),
 			)
@@ -499,6 +546,9 @@ class WRM_Admin_API {
 			return new WP_REST_Response( array( 'error' => 'slug is required' ), 400 );
 		}
 
+		$data['ip_allowlist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_allowlist' ) ?? '' ) );
+		$data['ip_blocklist']  = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' )  ?? '' ) );
+
 		$id = WRM_Router::insert_route( $data );
 		if ( ! $id ) {
 			return new WP_REST_Response( array( 'error' => 'Failed to create route.' ), 500 );
@@ -529,6 +579,9 @@ class WRM_Admin_API {
 		if ( ! $existing ) {
 			return new WP_REST_Response( array( 'error' => 'Route not found.' ), 404 );
 		}
+
+		$data['ip_allowlist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_allowlist' ) ?? '' ) );
+		$data['ip_blocklist']  = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' )  ?? '' ) );
 
 		WRM_Router::update_route( $slug, $data );
 
@@ -927,6 +980,7 @@ class WRM_Admin_API {
 			'offset'     => (int) ( $req->get_param( 'offset' )     ?? 0 ),
 			'status'     => sanitize_key( (string) ( $req->get_param( 'status' )     ?? '' ) ),
 			'route_slug' => sanitize_title( (string) ( $req->get_param( 'route_slug' ) ?? '' ) ),
+			'search'     => sanitize_text_field( (string) ( $req->get_param( 'search' ) ?? '' ) ),
 		);
 
 		$jobs = WRM_Job_Queue::get_jobs( array_filter( $args, static fn( $v ) => '' !== $v ) );
@@ -996,6 +1050,7 @@ class WRM_Admin_API {
 			'context'  => sanitize_key( (string) ( $req->get_param( 'context' ) ?? '' ) ),
 			'per_page' => (int) ( $req->get_param( 'per_page' ) ?? 50 ),
 			'offset'   => (int) ( $req->get_param( 'offset' )   ?? 0 ),
+			'search'   => sanitize_text_field( (string) ( $req->get_param( 'search' ) ?? '' ) ),
 		);
 
 		$logs = WRM_Logger::get_logs( array_filter( $args, static fn( $v ) => '' !== $v && 0 !== $v ) );
@@ -1165,8 +1220,182 @@ class WRM_Admin_API {
 	}
 
 	// -------------------------------------------------------------------------
+	// Metrics / rate-usage / log-tail handlers
+	// -------------------------------------------------------------------------
+
+	public static function route_metrics( WP_REST_Request $req ): WP_REST_Response {
+		$slug  = sanitize_title( $req->get_param( 'slug' ) );
+		$hours = max( 1, min( 168, (int) ( $req->get_param( 'hours' ) ?? 24 ) ) );
+		return new WP_REST_Response( array(
+			'route_slug' => $slug,
+			'hours'      => $hours,
+			'buckets'    => WRM_Metrics::get_hourly( $slug, $hours ),
+		), 200 );
+	}
+
+	public static function route_rate_usage( WP_REST_Request $req ): WP_REST_Response {
+		$slug = sanitize_title( $req->get_param( 'slug' ) );
+		$data = WRM_Router::get_rate_usage( $slug );
+		if ( empty( $data ) ) {
+			return new WP_REST_Response( array( 'error' => 'route_not_found' ), 404 );
+		}
+		return new WP_REST_Response( $data, 200 );
+	}
+
+	public static function tail_logs( WP_REST_Request $req ): WP_REST_Response {
+		global $wpdb;
+		$table    = $wpdb->prefix . 'wrm_logs';
+		$since_id = max( 0, (int) ( $req->get_param( 'since_id' ) ?? 0 ) );
+		$limit    = max( 1, min( 200, (int) ( $req->get_param( 'limit' ) ?? 50 ) ) );
+		$level    = sanitize_key( $req->get_param( 'level' ) ?? '' );
+
+		$where  = 'id > %d';
+		$params = array( $since_id );
+
+		if ( $level ) {
+			$where   .= ' AND level = %s';
+			$params[] = $level;
+		}
+		$params[] = $limit;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where} ORDER BY id ASC LIMIT %d",
+				...$params
+			),
+			ARRAY_A
+		) ?? array();
+
+		return new WP_REST_Response( $rows, 200 );
+	}
+
+	// -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
+
+	// -------------------------------------------------------------------------
+	// Dashboard
+	// -------------------------------------------------------------------------
+
+	public static function dashboard(): WP_REST_Response {
+		global $wpdb;
+
+		$captures_table = $wpdb->prefix . WRM_Installer::CAPTURES_TABLE;
+		$jobs_table     = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
+		$msgs_table     = $wpdb->prefix . WRM_Installer::MESSAGES_TABLE;
+		$logs_table     = $wpdb->prefix . 'wrm_logs';
+
+		$today_start = current_time( 'Y-m-d' ) . ' 00:00:00';
+
+		// --- aggregate stats ---
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$routes_table  = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
+		$active_routes = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$routes_table} WHERE status = 'active'" );
+
+		$captures_today = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE created_at >= %s", $today_start )
+		);
+
+		$job_rows = $wpdb->get_results(
+			"SELECT status, COUNT(*) AS cnt FROM {$jobs_table} GROUP BY status",
+			ARRAY_A
+		) ?? array();
+		$job_counts = array_fill_keys( array( 'queued', 'running', 'done', 'failed', 'dead', 'paused' ), 0 );
+		foreach ( $job_rows as $r ) {
+			if ( isset( $job_counts[ $r['status'] ] ) ) {
+				$job_counts[ $r['status'] ] = (int) $r['cnt'];
+			}
+		}
+
+		$messages_today = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$msgs_table} WHERE created_at >= %s", $today_start )
+		);
+
+		$error_today = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$logs_table} WHERE level IN ('error','exception') AND created_at >= %s",
+				$today_start
+			)
+		);
+
+		// --- recent failures ---
+		$recent_failures = $wpdb->get_results(
+			"SELECT id, route_slug, error_message, queued_at FROM {$jobs_table} WHERE status IN ('failed','dead') ORDER BY id DESC LIMIT 5",
+			ARRAY_A
+		) ?? array();
+
+		// --- recent errors ---
+		$recent_errors = $wpdb->get_results(
+			"SELECT id, context, message, created_at FROM {$logs_table} WHERE level IN ('error','exception') ORDER BY id DESC LIMIT 5",
+			ARRAY_A
+		) ?? array();
+
+		// --- pipeline view ---
+		$all_routes = $wpdb->get_results( "SELECT * FROM {$routes_table} ORDER BY id ASC", ARRAY_A ) ?? array();
+		// phpcs:enable
+
+		$pipelines = array();
+		foreach ( $all_routes as $route ) {
+			$mapping_id    = (int) ( $route['mapping_id'] ?? 0 );
+			$mapping_title = null;
+			$chain_types   = array();
+
+			if ( $mapping_id ) {
+				$post = get_post( $mapping_id );
+				if ( $post && 'wrm_mapping' === $post->post_type ) {
+					$mapping_title = $post->post_title;
+					$raw           = get_post_meta( $mapping_id, 'wrm_config', true );
+					if ( $raw && json_validate( $raw ) ) {
+						$cfg    = json_decode( $raw, true );
+						$chains = $cfg['chains'] ?? array();
+						foreach ( $chains as $chain ) {
+							$type = sanitize_key( $chain['type'] ?? '' );
+							if ( $type && ! in_array( $type, $chain_types, true ) ) {
+								$chain_types[] = $type;
+							}
+						}
+					}
+				}
+			}
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$captures_ct = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$captures_table} WHERE route_slug = %s AND created_at >= %s",
+					$route['slug'],
+					$today_start
+				)
+			);
+
+			$pipelines[] = array(
+				'route'          => $route,
+				'mapping_id'     => $mapping_id ?: null,
+				'mapping_title'  => $mapping_title,
+				'chain_types'    => $chain_types,
+				'captures_today' => $captures_ct,
+				'metrics_24h'    => WRM_Metrics::get_hourly( $route['slug'], 24 ),
+			);
+		}
+
+		return new WP_REST_Response(
+			array(
+				'stats'           => array(
+					'active_routes'       => $active_routes,
+					'captures_today'      => $captures_today,
+					'jobs'                => $job_counts,
+					'messages_today'      => $messages_today,
+					'errors_today'        => $error_today,
+					'sig_verified_today'  => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'verified' AND created_at >= %s", $today_start ) ),
+					'sig_failed_today'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'failed' AND created_at >= %s", $today_start ) ),
+				),
+				'pipelines'       => $pipelines,
+				'recent_failures' => $recent_failures,
+				'recent_errors'   => $recent_errors,
+			),
+			200
+		);
+	}
 
 	/**
 	 * Format a wrm_mapping post into a consistent API shape.

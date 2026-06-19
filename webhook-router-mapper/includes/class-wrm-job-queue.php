@@ -289,6 +289,7 @@ class WRM_Job_Queue {
 				);
 
 				WRM_Capture::mark_mapped( (int) $job['capture_id'], wp_json_encode( $result ) );
+				WRM_Metrics::increment( $job['route_slug'], 'jobs_ok' );
 
 				WRM_Logger::info(
 					'queue',
@@ -301,7 +302,7 @@ class WRM_Job_Queue {
 				);
 			} else {
 				$error = $result['error'] ?? 'mapping_returned_failure';
-				self::mark_failed( $job_id, $error, $attempt, $max_attempts );
+				self::mark_failed( $job_id, $error, $attempt, $max_attempts, $job['route_slug'] ?? '' );
 			}
 		} catch ( \Throwable $e ) {
 			WRM_Logger::exception(
@@ -309,7 +310,7 @@ class WRM_Job_Queue {
 				$e,
 				array( 'ref_id' => $job_id, 'attempt' => $attempt )
 			);
-			self::mark_failed( $job_id, $e->getMessage(), $attempt, $max_attempts );
+			self::mark_failed( $job_id, $e->getMessage(), $attempt, $max_attempts, $job['route_slug'] ?? '' );
 		}
 	}
 
@@ -329,7 +330,8 @@ class WRM_Job_Queue {
 		int $id,
 		string $error,
 		int $attempt,
-		int $max_attempts
+		int $max_attempts,
+		string $route_slug = ''
 	): void {
 		global $wpdb;
 
@@ -367,6 +369,10 @@ class WRM_Job_Queue {
 					'error'   => $error,
 				)
 			);
+			self::dispatch_dead_letter( $id );
+			if ( $route_slug ) {
+				WRM_Metrics::increment( $route_slug, 'jobs_failed' );
+			}
 		} else {
 			WRM_Logger::error(
 				'queue',
@@ -388,6 +394,54 @@ class WRM_Job_Queue {
 				array( $id )
 			);
 		}
+	}
+
+	public static function dispatch_dead_letter( int $job_id ): void {
+		global $wpdb;
+		$table = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $job_id ), ARRAY_A );
+		if ( ! $job ) { return; }
+
+		$mapping_post = get_post( (int) $job['mapping_id'] );
+		if ( ! $mapping_post ) { return; }
+
+		$raw_config = get_post_meta( (int) $job['mapping_id'], 'wrm_config', true );
+		$config     = json_decode( $raw_config ?: '{}', true ) ?? array();
+		$dlq_route  = sanitize_title( $config['dead_letter_route'] ?? '' );
+		if ( ! $dlq_route ) { return; }
+
+		// Get the original capture payload
+		$cap_table = $wpdb->prefix . WRM_Installer::CAPTURES_TABLE;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$cap = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$cap_table} WHERE id = %d", (int) $job['capture_id'] ), ARRAY_A );
+		if ( ! $cap ) { return; }
+
+		$payload = json_validate( $cap['payload'] ) ? ( json_decode( $cap['payload'], true ) ?? array() ) : array();
+		// Wrap in dead-letter envelope
+		$dlq_payload = array(
+			'_dlq'        => true,
+			'_job_id'     => $job_id,
+			'_route'      => $job['route_slug'],
+			'_error'      => $job['error_message'],
+			'_attempt'    => $job['attempt'],
+			'original'    => $payload,
+		);
+
+		// Store a new capture on the DLQ route
+		$dlq_capture_id = WRM_Capture::store_internal( $dlq_route, 'dlq', $dlq_payload );
+		if ( ! $dlq_capture_id ) { return; }
+
+		// Find the DLQ route's mapping_id
+		$routes_table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$dlq_mapping_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT mapping_id FROM {$routes_table} WHERE slug = %s", $dlq_route ) );
+
+		if ( $dlq_mapping_id ) {
+			self::enqueue( $dlq_route, $dlq_capture_id, $dlq_mapping_id );
+		}
+
+		WRM_Logger::info( 'queue', "Job #{$job_id} dispatched to dead-letter route '{$dlq_route}'.", array( 'ref_id' => $job_id ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -542,6 +596,11 @@ class WRM_Job_Queue {
 		if ( ! empty( $args['route_slug'] ) ) {
 			$where   .= ' AND route_slug = %s';
 			$params[] = sanitize_title( $args['route_slug'] );
+		}
+		if ( ! empty( $args['search'] ) ) {
+			$where   .= ' AND (error_message LIKE %s OR route_slug LIKE %s)';
+			$params[] = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
+			$params[] = '%' . $wpdb->esc_like( sanitize_text_field( $args['search'] ) ) . '%';
 		}
 
 		$params[] = $per_page;

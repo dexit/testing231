@@ -1,5 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, SelectControl, TextControl, TextareaControl, Notice, Spinner } from '@wordpress/components';
+import { Button, SelectControl, TextControl, TextareaControl, Notice, Spinner, Modal } from '@wordpress/components';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 
@@ -29,6 +29,10 @@ export default function SchedulesPage() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [payloadErr, setPayloadErr] = useState('');
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editPayloadErr, setEditPayloadErr] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -85,6 +89,32 @@ export default function SchedulesPage() {
 
   const copyTrigger = (url) => {
     navigator.clipboard?.writeText(url).then(() => showNotice('Trigger URL copied to clipboard.'));
+  };
+
+  const openEdit = (s) => {
+    setEditForm({
+      label: s.label || '',
+      mapping_id: s.mapping_id ? String(s.mapping_id) : '',
+      interval_key: s.interval_key || 'manual',
+      run_mode: s.run_mode || 'async',
+      seed_payload: s.seed_payload || '',
+      source_url: s.source_url || '',
+      source_method: s.source_method || 'GET',
+    });
+    setEditPayloadErr('');
+    setEditTarget(s);
+  };
+
+  const handleEditSave = () => {
+    if (!editForm.mapping_id) { showNotice('Pick a mapping first.', 'error'); return; }
+    if (editForm.seed_payload.trim()) {
+      try { JSON.parse(editForm.seed_payload); setEditPayloadErr(''); }
+      catch (e) { setEditPayloadErr('Seed payload is not valid JSON: ' + e.message); return; }
+    }
+    setEditSaving(true);
+    apiFetch({ path: `/wrm/v1/schedules/${editTarget.id}`, method: 'PUT', data: { ...editForm, mapping_id: +editForm.mapping_id } })
+      .then(() => { showNotice('Schedule updated.'); setEditTarget(null); setEditSaving(false); load(); })
+      .catch(e => { showNotice(e.message || 'Update failed', 'error'); setEditSaving(false); });
   };
 
   const mappingOptions = [
@@ -163,12 +193,46 @@ export default function SchedulesPage() {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <Button variant="secondary" isSmall onClick={() => runNow(s.id)}>▶ Run</Button>{' '}
                   <Button variant="tertiary" isSmall onClick={() => toggleStatus(s)}>{s.status === 'active' ? 'Pause' : 'Resume'}</Button>{' '}
+                  <Button variant="secondary" isSmall onClick={() => openEdit(s)}>Edit</Button>{' '}
                   <Button variant="link" isSmall isDestructive onClick={() => remove(s.id)}>Delete</Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {editTarget && (
+        <Modal
+          title={`Edit Schedule #${editTarget.id}`}
+          onRequestClose={() => setEditTarget(null)}
+          style={{ maxWidth: 720 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <TextControl label="Label" value={editForm.label} onChange={v => setEditForm(f => ({ ...f, label: v }))} placeholder="Nightly CRM sync" />
+            <SelectControl label="Mapping" value={editForm.mapping_id} options={mappingOptions} onChange={v => setEditForm(f => ({ ...f, mapping_id: v }))} />
+            <SelectControl label="Interval (timer)" value={editForm.interval_key} options={INTERVALS} onChange={v => setEditForm(f => ({ ...f, interval_key: v }))} />
+            <SelectControl label="Run mode" value={editForm.run_mode} options={[{ label: 'Async (queue)', value: 'async' }, { label: 'Sync (immediate)', value: 'sync' }]} onChange={v => setEditForm(f => ({ ...f, run_mode: v }))} />
+            <TextControl label="Source URL (optional ETL pull)" value={editForm.source_url} onChange={v => setEditForm(f => ({ ...f, source_url: v }))} placeholder="https://api.example.com/data.json" />
+            <SelectControl label="Source method" value={editForm.source_method} options={[{ label: 'GET', value: 'GET' }, { label: 'POST', value: 'POST' }]} onChange={v => setEditForm(f => ({ ...f, source_method: v }))} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <TextareaControl
+              label="Seed payload JSON (used when no Source URL is set)"
+              value={editForm.seed_payload}
+              onChange={v => { setEditForm(f => ({ ...f, seed_payload: v })); setEditPayloadErr(''); }}
+              rows={4}
+              placeholder='{ "type": "daily_digest" }'
+            />
+            {editPayloadErr && <p style={{ color: '#d63638', fontSize: 12 }}>{editPayloadErr}</p>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <Button variant="secondary" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleEditSave} disabled={editSaving}>
+              {editSaving ? <Spinner /> : 'Save Changes'}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -69,7 +69,13 @@ export default function CapturesPage() {
         setTotal(data.total || list.length);
         setLoading(false);
       })
-      .catch(e => { setError(e.message || 'Failed to load captures'); setLoading(false); });
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load captures');
+        setLoading(false);
+      });
   }, [page, filterRoute, filterProvider, filterMapped]);
 
   useEffect(() => {
@@ -208,6 +214,7 @@ export default function CapturesPage() {
                 <th>Route</th>
                 <th>Provider</th>
                 <th>Method</th>
+                <th>Sig</th>
                 <th>IP</th>
                 <th>Mapped</th>
                 <th>Created</th>
@@ -216,7 +223,13 @@ export default function CapturesPage() {
             </thead>
             <tbody>
               {captures.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>No captures found.</td></tr>
+                <tr>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {filterRoute
+                      ? <>No captures for route <strong>{filterRoute}</strong>.</>
+                      : 'No captures yet — POST a webhook to an active route to see it here.'}
+                  </td>
+                </tr>
               )}
               {captures.map(cap => (
                 <tr key={cap.id}>
@@ -224,6 +237,15 @@ export default function CapturesPage() {
                   <td><code>{cap.route_slug || '—'}</code></td>
                   <td>{cap.provider || '—'}</td>
                   <td>{cap.method || '—'}</td>
+                  <td>
+                    <span style={{
+                      padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                      background: cap.sig_status === 'verified' ? '#d7f0e0' : cap.sig_status === 'failed' ? '#fde8e8' : '#f0f0f0',
+                      color: cap.sig_status === 'verified' ? '#0a5227' : cap.sig_status === 'failed' ? '#7a0000' : '#888',
+                    }}>
+                      {cap.sig_status === 'verified' ? '✓ verified' : cap.sig_status === 'failed' ? '✗ failed' : '— skip'}
+                    </span>
+                  </td>
                   <td>{cap.source_ip || '—'}</td>
                   <td>{cap.mapped ? <StatusBadge status="done" /> : <StatusBadge status="dead" />}</td>
                   <td style={{ fontSize: 12 }}>{cap.created_at || '—'}</td>

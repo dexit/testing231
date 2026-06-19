@@ -18,6 +18,7 @@ class WRM_Installer {
 	const string SCHEDULES_TABLE      = 'wrm_schedules';
 	const string MESSAGES_TABLE       = 'wrm_messages';
 	const string MESSAGE_EVENTS_TABLE = 'wrm_message_events';
+	const string METRICS_TABLE        = 'wrm_metrics';
 
 	public static function install(): void {
 		global $wpdb;
@@ -38,6 +39,8 @@ class WRM_Installer {
 				mapping_id   bigint(20) unsigned  NOT NULL DEFAULT 0,
 				status       enum('active','paused') NOT NULL DEFAULT 'active',
 				created_at   datetime             NOT NULL,
+				ip_allowlist  text                 NOT NULL DEFAULT '',
+				ip_blocklist  text                 NOT NULL DEFAULT '',
 				PRIMARY KEY (id),
 				UNIQUE KEY slug (slug)
 			) {$charset};"
@@ -53,6 +56,7 @@ class WRM_Installer {
 				headers      text                DEFAULT NULL,
 				source_ip    varchar(45)         DEFAULT NULL,
 				mapped       tinyint(1)          NOT NULL DEFAULT 0,
+				sig_status   varchar(20)          NOT NULL DEFAULT 'skipped',
 				mapping_log  text                DEFAULT NULL,
 				created_at   datetime            NOT NULL,
 				PRIMARY KEY (id),
@@ -168,6 +172,19 @@ class WRM_Installer {
 				KEY level (level),
 				KEY context_level (context, level),
 				KEY created_at (created_at)
+			) {$charset};"
+		);
+
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}wrm_metrics (
+				id         bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				route_slug varchar(200)        NOT NULL DEFAULT '',
+				bucket     datetime            NOT NULL,
+				captures   int unsigned        NOT NULL DEFAULT 0,
+				jobs_ok    int unsigned        NOT NULL DEFAULT 0,
+				jobs_failed int unsigned       NOT NULL DEFAULT 0,
+				PRIMARY KEY (id),
+				UNIQUE KEY slug_bucket (route_slug(100), bucket)
 			) {$charset};"
 		);
 

@@ -324,6 +324,14 @@ class WRM_Mapper {
 		$type = sanitize_key( $chain['type'] ?? '' );
 		self::ensure_loaded();
 
+		// Conditional execution — skip chain if conditions don't match
+		if ( ! empty( $chain['conditions'] ) && is_array( $chain['conditions'] ) ) {
+			if ( ! self::evaluate_conditions( $chain['conditions'], $payload, $context ) ) {
+				WRM_Logger::debug( 'mapper', 'Chain skipped — conditions not met', array( 'type' => $type ) );
+				return array( 'type' => $type, 'status' => 'skipped', 'reason' => 'condition_not_met' );
+			}
+		}
+
 		switch ( $type ) {
 			case 'webhook':
 				return self::chain_webhook( $chain, $post_id, $payload, $context );
@@ -398,6 +406,38 @@ class WRM_Mapper {
 			default:
 				return array( 'type' => $type, 'status' => 'unknown_type' );
 		}
+	}
+
+	private static function evaluate_conditions( array $conditions, array $payload, array $context ): bool {
+		foreach ( $conditions as $cond ) {
+			$field = sanitize_text_field( $cond['field'] ?? '' );
+			$op    = sanitize_key( $cond['op'] ?? 'eq' );
+			$want  = $cond['value'] ?? '';
+
+			$actual = WRM_Merge_Tags::get_by_path( $payload, $field );
+			if ( null === $actual ) {
+				$actual = WRM_Merge_Tags::resolve( '{{' . $field . '}}', $context );
+			}
+
+			$pass = match ( $op ) {
+				'eq'           => (string) $actual === (string) $want,
+				'neq'          => (string) $actual !== (string) $want,
+				'gt'           => is_numeric( $actual ) && is_numeric( $want ) && (float) $actual > (float) $want,
+				'gte'          => is_numeric( $actual ) && is_numeric( $want ) && (float) $actual >= (float) $want,
+				'lt'           => is_numeric( $actual ) && is_numeric( $want ) && (float) $actual < (float) $want,
+				'lte'          => is_numeric( $actual ) && is_numeric( $want ) && (float) $actual <= (float) $want,
+				'contains'     => str_contains( (string) $actual, (string) $want ),
+				'not_contains' => ! str_contains( (string) $actual, (string) $want ),
+				'empty'        => '' === (string) $actual || null === $actual,
+				'not_empty'    => '' !== (string) $actual && null !== $actual,
+				default        => false,
+			};
+
+			if ( ! $pass ) {
+				return false; // AND logic — all conditions must pass
+			}
+		}
+		return true;
 	}
 
 	/**

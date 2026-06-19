@@ -85,15 +85,29 @@ class WRM_Admin {
 	}
 
 	public static function page_schedules(): void {
-		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
+		self::render_app_root();
 	}
 
 	public static function page_messages(): void {
-		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
+		self::render_app_root();
 	}
 
 	public static function page_functions(): void {
-		echo '<div class="wrap"><div id="wrm-admin-app-root"></div></div>';
+		self::render_app_root();
+	}
+
+	private static function render_app_root(): void {
+		$built = file_exists( WRM_PLUGIN_DIR . 'build/wrm-admin-app.js' );
+		echo '<div class="wrap"><div id="wrm-admin-app-root">';
+		if ( ! $built ) {
+			echo '<div class="notice notice-warning inline" style="margin:20px 0"><p>';
+			echo '<strong>Webhook Router &amp; Mapper</strong> — React app not built. ';
+			echo 'Run <code>npm install &amp;&amp; npm run build</code> inside the plugin directory.';
+			echo '</p></div>';
+		} else {
+			echo '<p style="color:#888;padding:20px;font-size:13px">Loading&hellip;</p>';
+		}
+		echo '</div></div>';
 	}
 
 	// -------------------------------------------------------------------------
@@ -105,11 +119,7 @@ class WRM_Admin {
 		if ( isset( $_POST['wrm_routes_nonce'] ) && wp_verify_nonce( sanitize_key( $_POST['wrm_routes_nonce'] ), 'wrm_routes_action' ) ) {
 			self::handle_route_action();
 		}
-		?>
-		<div class="wrap">
-		<div id="wrm-admin-app-root"></div>
-		</div>
-		<?php
+		self::render_app_root();
 	}
 
 	private static function handle_route_action(): void {
@@ -156,11 +166,7 @@ class WRM_Admin {
 	// -------------------------------------------------------------------------
 
 	public static function page_captures(): void {
-		?>
-		<div class="wrap">
-		<div id="wrm-admin-app-root"></div>
-		</div>
-		<?php
+		self::render_app_root();
 	}
 
 	// -------------------------------------------------------------------------
@@ -168,11 +174,7 @@ class WRM_Admin {
 	// -------------------------------------------------------------------------
 
 	public static function page_jobs(): void {
-		?>
-		<div class="wrap">
-		<div id="wrm-admin-app-root"></div>
-		</div>
-		<?php
+		self::render_app_root();
 	}
 
 	// -------------------------------------------------------------------------
@@ -180,10 +182,6 @@ class WRM_Admin {
 	// -------------------------------------------------------------------------
 
 	public static function page_logs(): void {
-		?>
-		<div class="wrap">
-		<div id="wrm-admin-app-root"></div>
-		</div>
-		<?php
+		self::render_app_root();
 	}
 }

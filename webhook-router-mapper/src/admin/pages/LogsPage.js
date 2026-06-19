@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
-import { Button, SelectControl, Notice, Spinner, Modal } from '@wordpress/components';
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { Button, SelectControl, TextControl, Notice, Spinner, Modal } from '@wordpress/components';
+import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import StatusBadge from '../components/StatusBadge';
 import JsonTree from '../components/JsonTree';
 
@@ -26,6 +26,7 @@ export default function LogsPage() {
   // Filters
   const [filterLevel, setFilterLevel] = useState('');
   const [filterContext, setFilterContext] = useState('');
+  const [search, setSearch] = useState('');
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -38,6 +39,12 @@ export default function LogsPage() {
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [purging, setPurging] = useState(false);
 
+  // Live tail
+  const [liveTail, setLiveTail] = useState(false);
+  const [tailLogs, setTailLogs] = useState([]);
+  const tailRef = useRef(null);
+  const lastIdRef = useRef(0);
+
   const loadLogs = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -45,6 +52,7 @@ export default function LogsPage() {
     params.set('page', page);
     if (filterLevel) params.set('level', filterLevel);
     if (filterContext) params.set('context', filterContext);
+    if (search) params.set('search', search);
 
     apiFetch({ path: `/wrm/v1/logs?${params.toString()}` })
       .then(data => {
@@ -62,10 +70,38 @@ export default function LogsPage() {
 
         setLoading(false);
       })
-      .catch(e => { setError(e.message || 'Failed to load logs'); setLoading(false); });
-  }, [page, filterLevel, filterContext]);
+      .catch(e => {
+        const msg = e?.message || '';
+        setError(e?.code === 'rest_forbidden' || /forbidden|not allowed/i.test(msg)
+          ? 'Access denied — administrator privileges required.'
+          : msg || 'Failed to load logs');
+        setLoading(false);
+      });
+  }, [page, filterLevel, filterContext, search]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  useEffect(() => {
+    if (!liveTail) {
+      clearInterval(tailRef.current);
+      setTailLogs([]);
+      lastIdRef.current = 0;
+      return;
+    }
+    const fetchTail = () => {
+      apiFetch({ path: `/wrm/v1/logs/tail?since_id=${lastIdRef.current}&limit=50` })
+        .then(rows => {
+          if (Array.isArray(rows) && rows.length > 0) {
+            lastIdRef.current = rows[rows.length - 1].id;
+            setTailLogs(prev => [...rows, ...prev].slice(0, 200));
+          }
+        })
+        .catch(() => {});
+    };
+    fetchTail();
+    tailRef.current = setInterval(fetchTail, 3000);
+    return () => clearInterval(tailRef.current);
+  }, [liveTail]);
 
   const showNotice = (msg, type = 'success') => {
     setNotice({ msg, type });
@@ -146,11 +182,49 @@ export default function LogsPage() {
           options={contextOptions}
           onChange={v => { setFilterContext(v); setPage(1); }}
         />
+        <TextControl
+          label="Search"
+          value={search}
+          onChange={v => { setSearch(v); setPage(1); }}
+          placeholder="message text"
+        />
         <Button variant="secondary" onClick={loadLogs}>Refresh</Button>
+        <Button
+          variant={liveTail ? 'primary' : 'secondary'}
+          onClick={() => setLiveTail(t => !t)}
+          style={{ minWidth: 100 }}
+        >
+          {liveTail ? '● Live Tail' : 'Live Tail'}
+        </Button>
         <Button variant="secondary" isDestructive onClick={() => setShowPurgeConfirm(true)}>
           Purge All Logs
         </Button>
       </div>
+
+      {liveTail && (
+        <div style={{ marginBottom: 16, border: '1px solid #2271b1', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ background: '#1d2327', color: '#7ec8e3', padding: '6px 12px', fontSize: 12, fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
+            <span>▶ Live Tail — {tailLogs.length} entries</span>
+            <button onClick={() => setTailLogs([])} style={{ background: 'none', border: 'none', color: '#7ec8e3', cursor: 'pointer', fontSize: 11 }}>Clear</button>
+          </div>
+          <div style={{ maxHeight: 320, overflowY: 'auto', background: '#1d2327', fontFamily: 'monospace', fontSize: 12 }}>
+            {tailLogs.length === 0
+              ? <p style={{ color: '#888', padding: 12, margin: 0 }}>Waiting for new log entries…</p>
+              : tailLogs.map(log => {
+                  const lvlColor = { debug: '#888', info: '#7ec8e3', warning: '#dba617', error: '#f86368', exception: '#f86368' }[log.level] || '#ccc';
+                  return (
+                    <div key={log.id} style={{ borderBottom: '1px solid #2d3640', padding: '4px 12px', color: '#ccc' }}>
+                      <span style={{ color: '#555', marginRight: 8 }}>{log.created_at}</span>
+                      <span style={{ color: lvlColor, fontWeight: 700, marginRight: 8, textTransform: 'uppercase', fontSize: 10 }}>{log.level}</span>
+                      <span style={{ color: '#aaa', marginRight: 8 }}>[{log.context}]</span>
+                      <span>{log.message}</span>
+                    </div>
+                  );
+                })
+            }
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <Spinner />
@@ -172,7 +246,15 @@ export default function LogsPage() {
             </thead>
             <tbody>
               {logs.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#888' }}>No logs found.</td></tr>
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', color: '#888', padding: '20px 0' }}>
+                    {search
+                      ? <>No logs matching <strong>"{search}"</strong>.</>
+                      : filterLevel
+                        ? <>No <strong>{filterLevel}</strong> logs found.</>
+                        : 'No logs yet — activity will appear here as routes run.'}
+                  </td>
+                </tr>
               )}
               {logs.map(log => (
                 <>
