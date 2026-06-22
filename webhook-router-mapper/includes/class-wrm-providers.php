@@ -124,11 +124,11 @@ class WRM_Providers {
 		$raw  = $req->get_body();
 		wp_parse_str( $raw, $body );
 
-		$from   = sanitize_text_field( $body['From']       ?? '' );
-		$to     = sanitize_text_field( $body['To']         ?? '' );
-		$text   = sanitize_text_field( $body['Body']       ?? '' );
+		$from   = sanitize_text_field( $body['From'] ?? '' );
+		$to     = sanitize_text_field( $body['To'] ?? '' );
+		$text   = sanitize_text_field( $body['Body'] ?? '' );
 		$sid    = sanitize_text_field( $body['MessageSid'] ?? $body['SmsSid'] ?? '' );
-		$status = sanitize_text_field( $body['SmsStatus']  ?? $body['MessageStatus'] ?? '' );
+		$status = sanitize_text_field( $body['SmsStatus'] ?? $body['MessageStatus'] ?? '' );
 
 		return array(
 			'provider' => 'twilio',
@@ -163,10 +163,10 @@ class WRM_Providers {
 		return array(
 			'provider'       => 'hubspot',
 			'event_type'     => sanitize_text_field( $first['subscriptionType'] ?? '' ),
-			'object_id'      => (int) ( $first['objectId']      ?? 0 ),
-			'property_name'  => sanitize_text_field( $first['propertyName']  ?? '' ),
+			'object_id'      => (int) ( $first['objectId'] ?? 0 ),
+			'property_name'  => sanitize_text_field( $first['propertyName'] ?? '' ),
 			'property_value' => sanitize_text_field( $first['propertyValue'] ?? '' ),
-			'portal_id'      => (int) ( $first['portalId']      ?? 0 ),
+			'portal_id'      => (int) ( $first['portalId'] ?? 0 ),
 			'events'         => $events,
 			'raw'            => $events,
 		);
@@ -189,11 +189,11 @@ class WRM_Providers {
 		}
 
 		// Dig through the nested Meta Cloud API structure.
-		$entry   = $data['entry'][0]     ?? array();
-		$changes = $entry['changes'][0]  ?? array();
-		$value   = $changes['value']     ?? array();
+		$entry   = $data['entry'][0] ?? array();
+		$changes = $entry['changes'][0] ?? array();
+		$value   = $changes['value'] ?? array();
 		$message = $value['messages'][0] ?? array();
-		$meta    = $value['metadata']    ?? array();
+		$meta    = $value['metadata'] ?? array();
 
 		$msg_type = sanitize_key( $message['type'] ?? 'unknown' );
 
@@ -207,13 +207,13 @@ class WRM_Providers {
 
 		return array(
 			'provider'   => 'whatsapp',
-			'from'       => sanitize_text_field( $message['from']               ?? '' ),
-			'to'         => sanitize_text_field( $meta['display_phone_number']  ?? '' ),
-			'message_id' => sanitize_text_field( $message['id']                 ?? '' ),
+			'from'       => sanitize_text_field( $message['from'] ?? '' ),
+			'to'         => sanitize_text_field( $meta['display_phone_number'] ?? '' ),
+			'message_id' => sanitize_text_field( $message['id'] ?? '' ),
 			'type'       => $msg_type,
 			'text'       => $text,
-			'timestamp'  => sanitize_text_field( $message['timestamp']          ?? '' ),
-			'phone_id'   => sanitize_text_field( $meta['phone_number_id']       ?? '' ),
+			'timestamp'  => sanitize_text_field( $message['timestamp'] ?? '' ),
+			'phone_id'   => sanitize_text_field( $meta['phone_number_id'] ?? '' ),
 			'raw'        => $data,
 		);
 	}
@@ -225,12 +225,12 @@ class WRM_Providers {
 	 * @return array Merged parameter array.
 	 */
 	private static function normalize_generic( WP_REST_Request $req ): array {
-		$query = $req->get_query_params() ?? array();
-		$body  = $req->get_body_params()  ?? array();
-		$json  = $req->get_json_params()  ?? array();
+		$query = $req->get_query_params();
+		$body  = $req->get_body_params();
+		$json  = (array) $req->get_json_params();
 
 		// JSON body takes precedence; body params fall back; query params last.
-		$merged = array_merge( $query, $body, is_array( $json ) ? $json : array() );
+		$merged = array_merge( $query, $body, $json );
 
 		return array_merge( $merged, array( 'provider' => 'generic' ) );
 	}
@@ -337,7 +337,7 @@ class WRM_Providers {
 		$path   = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ?? $req->get_route() ) );
 		$uri    = $scheme . '://' . $host . $path;
 
-		$signed = $secret . strtoupper( $req->get_method() ) . $uri . $req->get_body() . $timestamp_ms;
+		$signed   = $secret . strtoupper( $req->get_method() ) . $uri . $req->get_body() . $timestamp_ms;
 		$expected = hash_hmac( 'sha256', $signed, $secret );
 
 		return hash_equals( $expected, $sig );

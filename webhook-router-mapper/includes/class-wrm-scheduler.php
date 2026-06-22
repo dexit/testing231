@@ -88,7 +88,7 @@ class WRM_Scheduler {
 			global $wpdb;
 			$table = $wpdb->prefix . WRM_Installer::SCHEDULES_TABLE;
 			// UTC — next_run is stored in UTC (gmdate), so compare in UTC too.
-			$now   = current_time( 'mysql', true );
+			$now = current_time( 'mysql', true );
 
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$due = $wpdb->get_results(
@@ -128,7 +128,10 @@ class WRM_Scheduler {
 		$id         = (int) $schedule['id'];
 		$mapping_id = (int) $schedule['mapping_id'];
 
-		$result = array( 'schedule_id' => $id, 'trigger' => $trigger );
+		$result = array(
+			'schedule_id' => $id,
+			'trigger'     => $trigger,
+		);
 
 		$interval_key = (string) ( $schedule['interval_key'] ?? 'manual' );
 
@@ -158,15 +161,19 @@ class WRM_Scheduler {
 			$result['status']  = ! empty( $apply['success'] ) ? 'done' : 'failed';
 			$result['post_id'] = $apply['post_id'] ?? 0;
 		} else {
-			$job_id            = WRM_Job_Queue::enqueue( '_schedule', $capture_id, $mapping_id );
-			$result['status']  = 'queued';
-			$result['job_id']  = $job_id;
+			$job_id           = WRM_Job_Queue::enqueue( '_schedule', $capture_id, $mapping_id );
+			$result['status'] = 'queued';
+			$result['job_id'] = $job_id;
 		}
 
 		WRM_Logger::info(
 			'scheduler',
 			"Schedule #{$id} ran ({$trigger}).",
-			array( 'ref_id' => $id, 'capture_id' => $capture_id, 'status' => $result['status'] )
+			array(
+				'ref_id'     => $id,
+				'capture_id' => $capture_id,
+				'status'     => $result['status'],
+			)
 		);
 
 		self::record_run( $id, $interval_key, $result );
@@ -189,7 +196,13 @@ class WRM_Scheduler {
 			}
 
 			$method   = self::sanitize_method( $schedule['source_method'] ?? 'GET' );
-			$response = wp_remote_request( $url, array( 'method' => $method, 'timeout' => 20 ) );
+			$response = wp_remote_request(
+				$url,
+				array(
+					'method'  => $method,
+					'timeout' => 20,
+				)
+			);
 
 			if ( is_wp_error( $response ) ) {
 				WRM_Logger::error( 'scheduler', 'Source URL fetch failed: ' . $response->get_error_message(), array( 'url' => $url ) );

@@ -117,7 +117,10 @@ class WRM_Demo {
 			}
 		}
 
-		return array( 'inserted' => $inserted, 'total' => count( $routes ) );
+		return array(
+			'inserted' => $inserted,
+			'total'    => count( $routes ),
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -129,19 +132,34 @@ class WRM_Demo {
 			array(
 				'title'  => 'Demo: Stripe Payment → Order Post',
 				'config' => array(
-					'cpt'             => 'post',
-					'post_status'     => 'publish',
-					'update_existing' => true,
-					'match_source'    => 'metadata.order_id',
-					'match_field'     => 'meta:_stripe_order_id',
-					'fields'          => array(
-						array( 'source' => 'metadata.customer_name', 'target' => 'post_title' ),
-						array( 'source' => 'metadata.order_id',      'target' => 'meta:_stripe_order_id' ),
-						array( 'source' => 'amount',                 'target' => 'meta:_order_amount' ),
-						array( 'source' => 'currency',               'target' => 'meta:_order_currency' ),
-						array( 'source' => 'metadata.plan',          'target' => 'taxonomy:category' ),
+					'cpt'               => 'post',
+					'post_status'       => 'publish',
+					'update_existing'   => true,
+					'match_source'      => 'metadata.order_id',
+					'match_field'       => 'meta:_stripe_order_id',
+					'fields'            => array(
+						array(
+							'source' => 'metadata.customer_name',
+							'target' => 'post_title',
+						),
+						array(
+							'source' => 'metadata.order_id',
+							'target' => 'meta:_stripe_order_id',
+						),
+						array(
+							'source' => 'amount',
+							'target' => 'meta:_order_amount',
+						),
+						array(
+							'source' => 'currency',
+							'target' => 'meta:_order_currency',
+						),
+						array(
+							'source' => 'metadata.plan',
+							'target' => 'taxonomy:category',
+						),
 					),
-					'chains' => array(
+					'chains'            => array(
 						array(
 							'type'          => 'email',
 							'to'            => '{{payload.metadata.customer_email}}',
@@ -150,7 +168,11 @@ class WRM_Demo {
 							'body_template' => '<h2>Thank you, {{payload.metadata.customer_name}}!</h2><p>Your payment of {{payload.amount}} {{payload.currency}} has been received.</p>',
 							'track'         => true,
 							'conditions'    => array(
-								array( 'field' => 'type', 'op' => 'eq', 'value' => 'payment_intent.succeeded' ),
+								array(
+									'field' => 'type',
+									'op'    => 'eq',
+									'value' => 'payment_intent.succeeded',
+								),
 							),
 						),
 						array(
@@ -159,7 +181,11 @@ class WRM_Demo {
 							'method'        => 'POST',
 							'body_template' => '{"order_id":"{{payload.metadata.order_id}}","status":"paid","amount":{{payload.amount}}}',
 							'conditions'    => array(
-								array( 'field' => 'amount', 'op' => 'gt', 'value' => '1000' ),
+								array(
+									'field' => 'amount',
+									'op'    => 'gt',
+									'value' => '1000',
+								),
 							),
 						),
 					),
@@ -169,16 +195,28 @@ class WRM_Demo {
 			array(
 				'title'  => 'Demo: HubSpot Contact → WP User Meta',
 				'config' => array(
-					'cpt'             => 'post',
-					'post_status'     => 'draft',
-					'update_existing' => false,
-					'fields'          => array(
-						array( 'source' => 'properties.firstname',      'target' => 'post_title' ),
-						array( 'source' => 'properties.email',          'target' => 'meta:contact_email' ),
-						array( 'source' => 'properties.company',        'target' => 'meta:contact_company' ),
-						array( 'source' => 'properties.lifecyclestage', 'target' => 'taxonomy:post_tag' ),
+					'cpt'               => 'post',
+					'post_status'       => 'draft',
+					'update_existing'   => false,
+					'fields'            => array(
+						array(
+							'source' => 'properties.firstname',
+							'target' => 'post_title',
+						),
+						array(
+							'source' => 'properties.email',
+							'target' => 'meta:contact_email',
+						),
+						array(
+							'source' => 'properties.company',
+							'target' => 'meta:contact_company',
+						),
+						array(
+							'source' => 'properties.lifecyclestage',
+							'target' => 'taxonomy:post_tag',
+						),
 					),
-					'chains' => array(
+					'chains'            => array(
 						array(
 							'type'        => 'sms',
 							'provider'    => 'twilio',
@@ -189,8 +227,16 @@ class WRM_Demo {
 							'auth_token'  => 'demo_auth_token',
 							'track'       => true,
 							'conditions'  => array(
-								array( 'field' => 'properties.phone', 'op' => 'not_empty', 'value' => '' ),
-								array( 'field' => 'properties.hs_marketable_status', 'op' => 'eq', 'value' => 'true' ),
+								array(
+									'field' => 'properties.phone',
+									'op'    => 'not_empty',
+									'value' => '',
+								),
+								array(
+									'field' => 'properties.hs_marketable_status',
+									'op'    => 'eq',
+									'value' => 'true',
+								),
 							),
 						),
 					),
@@ -203,12 +249,24 @@ class WRM_Demo {
 					'cpt'         => 'post',
 					'post_status' => 'publish',
 					'fields'      => array(
-						array( 'source' => 'order.id',       'target' => 'post_title' ),
-						array( 'source' => 'order.total',    'target' => 'meta:order_total' ),
-						array( 'source' => 'order.status',   'target' => 'meta:order_status' ),
-						array( 'source' => 'customer.email', 'target' => 'meta:customer_email' ),
+						array(
+							'source' => 'order.id',
+							'target' => 'post_title',
+						),
+						array(
+							'source' => 'order.total',
+							'target' => 'meta:order_total',
+						),
+						array(
+							'source' => 'order.status',
+							'target' => 'meta:order_status',
+						),
+						array(
+							'source' => 'customer.email',
+							'target' => 'meta:customer_email',
+						),
 					),
-					'chains' => array(
+					'chains'      => array(
 						array(
 							'type'          => 'email',
 							'to'            => '{{payload.customer.email}}',
@@ -227,7 +285,11 @@ class WRM_Demo {
 							'auth_token'  => 'demo_auth_token',
 							'track'       => true,
 							'conditions'  => array(
-								array( 'field' => 'customer.phone', 'op' => 'not_empty', 'value' => '' ),
+								array(
+									'field' => 'customer.phone',
+									'op'    => 'not_empty',
+									'value' => '',
+								),
 							),
 						),
 						array(
@@ -241,8 +303,12 @@ class WRM_Demo {
 								'total'     => '{{payload.order.total}}',
 								'timestamp' => '{{payload.timestamp}}',
 							),
-							'conditions' => array(
-								array( 'field' => 'order.total', 'op' => 'gt', 'value' => '50' ),
+							'conditions'   => array(
+								array(
+									'field' => 'order.total',
+									'op'    => 'gt',
+									'value' => '50',
+								),
 							),
 						),
 					),
@@ -251,13 +317,19 @@ class WRM_Demo {
 			array(
 				'title'  => 'Demo: Conditional Chain Router',
 				'config' => array(
-					'cpt'         => 'post',
-					'post_status' => 'publish',
-					'fields'      => array(
-						array( 'source' => 'event',   'target' => 'post_title' ),
-						array( 'source' => 'payload', 'target' => 'meta:event_payload' ),
+					'cpt'               => 'post',
+					'post_status'       => 'publish',
+					'fields'            => array(
+						array(
+							'source' => 'event',
+							'target' => 'post_title',
+						),
+						array(
+							'source' => 'payload',
+							'target' => 'meta:event_payload',
+						),
 					),
-					'chains' => array(
+					'chains'            => array(
 						array(
 							'type'          => 'email',
 							'to'            => 'admin@example.com',
@@ -265,15 +337,27 @@ class WRM_Demo {
 							'format'        => 'text',
 							'body_template' => 'High value event detected:\nEvent: {{payload.event}}\nAmount: {{payload.amount}}\nUser: {{payload.user_id}}',
 							'conditions'    => array(
-								array( 'field' => 'amount', 'op' => 'gte', 'value' => '500' ),
-								array( 'field' => 'event',  'op' => 'contains', 'value' => 'purchase' ),
+								array(
+									'field' => 'amount',
+									'op'    => 'gte',
+									'value' => '500',
+								),
+								array(
+									'field' => 'event',
+									'op'    => 'contains',
+									'value' => 'purchase',
+								),
 							),
 						),
 						array(
 							'type'       => 'function',
 							'function'   => 'wrm_demo_log_event',
 							'conditions' => array(
-								array( 'field' => 'amount', 'op' => 'lt', 'value' => '500' ),
+								array(
+									'field' => 'amount',
+									'op'    => 'lt',
+									'value' => '500',
+								),
 							),
 						),
 						array(
@@ -281,7 +365,11 @@ class WRM_Demo {
 							'url'        => 'https://httpbin.org/post',
 							'method'     => 'POST',
 							'conditions' => array(
-								array( 'field' => 'event', 'op' => 'eq', 'value' => 'refund' ),
+								array(
+									'field' => 'event',
+									'op'    => 'eq',
+									'value' => 'refund',
+								),
 							),
 						),
 					),
@@ -294,18 +382,34 @@ class WRM_Demo {
 					'cpt'         => 'post',
 					'post_status' => 'draft',
 					'fields'      => array(
-						array( 'source' => '_job_id',  'target' => 'post_title' ),
-						array( 'source' => '_route',   'target' => 'meta:dlq_source_route' ),
-						array( 'source' => '_error',   'target' => 'meta:dlq_error' ),
-						array( 'source' => '_attempt', 'target' => 'meta:dlq_attempts' ),
+						array(
+							'source' => '_job_id',
+							'target' => 'post_title',
+						),
+						array(
+							'source' => '_route',
+							'target' => 'meta:dlq_source_route',
+						),
+						array(
+							'source' => '_error',
+							'target' => 'meta:dlq_error',
+						),
+						array(
+							'source' => '_attempt',
+							'target' => 'meta:dlq_attempts',
+						),
 					),
-					'chains' => array(
+					'chains'      => array(
 						array(
 							'type'          => 'email',
 							'to'            => 'admin@example.com',
 							'subject'       => '[DLQ] Failed job #{{payload._job_id}} from {{payload._route}}',
 							'format'        => 'html',
-							'body_template' => '<h3>Dead Letter Queue Alert</h3><p><strong>Job:</strong> #{{payload._job_id}}<br><strong>Route:</strong> {{payload._route}}<br><strong>Error:</strong> {{payload._error}}<br><strong>Attempts:</strong> {{payload._attempt}}</p>',
+							'body_template' => '<h3>Dead Letter Queue Alert</h3>'
+								. '<p><strong>Job:</strong> #{{payload._job_id}}<br>'
+								. '<strong>Route:</strong> {{payload._route}}<br>'
+								. '<strong>Error:</strong> {{payload._error}}<br>'
+								. '<strong>Attempts:</strong> {{payload._attempt}}</p>',
 						),
 					),
 				),
@@ -314,7 +418,17 @@ class WRM_Demo {
 
 		$inserted = 0;
 		foreach ( $mappings as $m ) {
-			$existing = get_page_by_title( $m['title'], OBJECT, 'wrm_mapping' );
+			$q        = new WP_Query(
+				array(
+					'post_type'      => 'wrm_mapping',
+					'title'          => $m['title'],
+					'post_status'    => 'any',
+					'posts_per_page' => 1,
+					'fields'         => 'ids',
+					'no_found_rows'  => true,
+				)
+			);
+			$existing = $q->have_posts() ? get_post( $q->posts[0] ) : null;
 			if ( ! $existing ) {
 				$post_id = wp_insert_post(
 					array(
@@ -323,7 +437,7 @@ class WRM_Demo {
 						'post_title'  => $m['title'],
 					)
 				);
-				if ( $post_id && ! is_wp_error( $post_id ) ) {
+				if ( $post_id > 0 ) {
 					update_post_meta( $post_id, 'wrm_config', wp_json_encode( $m['config'] ) );
 
 					// Wire the mapping_id to its corresponding route.
@@ -337,13 +451,16 @@ class WRM_Demo {
 			}
 		}
 
-		return array( 'inserted' => $inserted, 'total' => count( $mappings ) );
+		return array(
+			'inserted' => $inserted,
+			'total'    => count( $mappings ),
+		);
 	}
 
 	private static function get_route_slug_for_mapping( string $title ): string {
 		$map = array(
 			'Demo: Stripe Payment → Order Post'      => 'demo-stripe-webhook',
-			'Demo: HubSpot Contact → WP User Meta'  => 'demo-hubspot-contact',
+			'Demo: HubSpot Contact → WP User Meta'   => 'demo-hubspot-contact',
 			'Demo: Order Notification (Email + SMS)' => 'demo-order-notify',
 			'Demo: Conditional Chain Router'         => 'demo-conditional-chains',
 			'Demo: Dead Letter Queue Handler'        => 'demo-dead-letter-queue',
@@ -361,7 +478,10 @@ class WRM_Demo {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE route_slug LIKE 'demo-%'" );
 		if ( $existing >= 10 ) {
-			return array( 'inserted' => 0, 'skipped' => true );
+			return array(
+				'inserted' => 0,
+				'skipped'  => true,
+			);
 		}
 
 		$now      = time();
@@ -383,7 +503,12 @@ class WRM_Demo {
 						),
 					)
 				),
-				'headers'    => wp_json_encode( array( 'content-type' => 'application/json', 'stripe-signature' => 'v1=demo_sig_1' ) ),
+				'headers'    => wp_json_encode(
+					array(
+						'content-type'     => 'application/json',
+						'stripe-signature' => 'v1=demo_sig_1',
+					)
+				),
 				'source_ip'  => '54.187.174.169',
 				'sig_status' => 'verified',
 				'mapped'     => 1,
@@ -398,7 +523,10 @@ class WRM_Demo {
 						'type'               => 'payment_intent.payment_failed',
 						'amount'             => 1500,
 						'currency'           => 'usd',
-						'last_payment_error' => array( 'code' => 'card_declined', 'message' => 'Your card was declined.' ),
+						'last_payment_error' => array(
+							'code'    => 'card_declined',
+							'message' => 'Your card was declined.',
+						),
 						'metadata'           => array(
 							'order_id'       => 'ord_demo_002',
 							'customer_name'  => 'Bob Smith',
@@ -406,7 +534,12 @@ class WRM_Demo {
 						),
 					)
 				),
-				'headers'    => wp_json_encode( array( 'content-type' => 'application/json', 'stripe-signature' => 'v1=demo_sig_2' ) ),
+				'headers'    => wp_json_encode(
+					array(
+						'content-type'     => 'application/json',
+						'stripe-signature' => 'v1=demo_sig_2',
+					)
+				),
 				'source_ip'  => '3.18.12.63',
 				'sig_status' => 'verified',
 				'mapped'     => 0,
@@ -421,17 +554,22 @@ class WRM_Demo {
 						'objectId'   => 12345,
 						'objectType' => 'CONTACT',
 						'properties' => array(
-							'firstname'              => 'Carol',
-							'lastname'               => 'Williams',
-							'email'                  => 'carol@acme.com',
-							'company'                => 'Acme Corp',
-							'phone'                  => '+14155551234',
-							'lifecyclestage'         => 'lead',
-							'hs_marketable_status'   => 'true',
+							'firstname'            => 'Carol',
+							'lastname'             => 'Williams',
+							'email'                => 'carol@acme.com',
+							'company'              => 'Acme Corp',
+							'phone'                => '+14155551234',
+							'lifecyclestage'       => 'lead',
+							'hs_marketable_status' => 'true',
 						),
 					)
 				),
-				'headers'    => wp_json_encode( array( 'content-type' => 'application/json', 'x-hubspot-signature' => 'demo_hs_sig' ) ),
+				'headers'    => wp_json_encode(
+					array(
+						'content-type'        => 'application/json',
+						'x-hubspot-signature' => 'demo_hs_sig',
+					)
+				),
 				'source_ip'  => '185.234.219.167',
 				'sig_status' => 'failed',
 				'mapped'     => 1,
@@ -443,12 +581,25 @@ class WRM_Demo {
 				'provider'   => 'custom',
 				'payload'    => wp_json_encode(
 					array(
-						'order'     => array( 'id' => 'WC-10042', 'total' => '149.99', 'status' => 'completed' ),
-						'customer'  => array( 'email' => 'dave@example.com', 'phone' => '+447700900123', 'name' => 'Dave Evans' ),
+						'order'     => array(
+							'id'     => 'WC-10042',
+							'total'  => '149.99',
+							'status' => 'completed',
+						),
+						'customer'  => array(
+							'email' => 'dave@example.com',
+							'phone' => '+447700900123',
+							'name'  => 'Dave Evans',
+						),
 						'timestamp' => gmdate( 'c', $now - 900 ),
 					)
 				),
-				'headers'    => wp_json_encode( array( 'content-type' => 'application/json', 'x-wrm-token' => 'demo_order_token_xyz789' ) ),
+				'headers'    => wp_json_encode(
+					array(
+						'content-type' => 'application/json',
+						'x-wrm-token'  => 'demo_order_token_xyz789',
+					)
+				),
 				'source_ip'  => '10.0.0.5',
 				'sig_status' => 'skipped',
 				'mapped'     => 1,
@@ -513,7 +664,10 @@ class WRM_Demo {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE route_slug LIKE 'demo-%'" );
 		if ( $existing >= 5 ) {
-			return array( 'inserted' => 0, 'skipped' => true );
+			return array(
+				'inserted' => 0,
+				'skipped'  => true,
+			);
 		}
 
 		$jobs = array(
@@ -525,7 +679,20 @@ class WRM_Demo {
 				'status'        => 'done',
 				'attempt'       => 1,
 				'max_attempts'  => 3,
-				'result'        => wp_json_encode( array( 'success' => true, 'post_id' => 42, 'action' => 'created', 'chains' => array( array( 'type' => 'email', 'status' => 'sent', 'to' => 'alice@example.com' ) ) ) ),
+				'result'        => wp_json_encode(
+					array(
+						'success' => true,
+						'post_id' => 42,
+						'action'  => 'created',
+						'chains'  => array(
+							array(
+								'type'   => 'email',
+								'status' => 'sent',
+								'to'     => 'alice@example.com',
+							),
+						),
+					)
+				),
 				'duration_ms'   => 324,
 				'queued_at'     => gmdate( 'Y-m-d H:i:s', time() - 3600 ),
 				'started_at'    => gmdate( 'Y-m-d H:i:s', time() - 3599 ),
@@ -540,7 +707,20 @@ class WRM_Demo {
 				'status'        => 'done',
 				'attempt'       => 1,
 				'max_attempts'  => 3,
-				'result'        => wp_json_encode( array( 'success' => true, 'post_id' => 43, 'action' => 'created', 'chains' => array( array( 'type' => 'sms', 'status' => 'sent', 'to' => '+14155551234' ) ) ) ),
+				'result'        => wp_json_encode(
+					array(
+						'success' => true,
+						'post_id' => 43,
+						'action'  => 'created',
+						'chains'  => array(
+							array(
+								'type'   => 'sms',
+								'status' => 'sent',
+								'to'     => '+14155551234',
+							),
+						),
+					)
+				),
 				'duration_ms'   => 891,
 				'queued_at'     => gmdate( 'Y-m-d H:i:s', time() - 1800 ),
 				'started_at'    => gmdate( 'Y-m-d H:i:s', time() - 1799 ),
@@ -610,7 +790,10 @@ class WRM_Demo {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE label LIKE 'Demo:%'" );
 		if ( $existing >= 2 ) {
-			return array( 'inserted' => 0, 'skipped' => true );
+			return array(
+				'inserted' => 0,
+				'skipped'  => true,
+			);
 		}
 
 		$mapping_id = self::get_demo_mapping_id( 'Demo: Order Notification (Email + SMS)' );
@@ -622,8 +805,16 @@ class WRM_Demo {
 				'interval_key'  => 'daily',
 				'seed_payload'  => wp_json_encode(
 					array(
-						'order'     => array( 'id' => 'SCHEDULED-001', 'total' => '0.00', 'status' => 'report' ),
-						'customer'  => array( 'email' => 'admin@example.com', 'phone' => '', 'name' => 'Admin' ),
+						'order'     => array(
+							'id'     => 'SCHEDULED-001',
+							'total'  => '0.00',
+							'status' => 'report',
+						),
+						'customer'  => array(
+							'email' => 'admin@example.com',
+							'phone' => '',
+							'name'  => 'Admin',
+						),
 						'timestamp' => '{{now}}',
 					)
 				),
@@ -634,7 +825,13 @@ class WRM_Demo {
 				'status'        => 'active',
 				'last_run'      => gmdate( 'Y-m-d H:i:s', time() - 86400 ),
 				'next_run'      => gmdate( 'Y-m-d H:i:s', time() + 3600 ),
-				'last_result'   => wp_json_encode( array( 'success' => true, 'post_id' => 10, 'action' => 'created' ) ),
+				'last_result'   => wp_json_encode(
+					array(
+						'success' => true,
+						'post_id' => 10,
+						'action'  => 'created',
+					)
+				),
 				'created_at'    => current_time( 'mysql' ),
 			),
 			array(
@@ -675,7 +872,10 @@ class WRM_Demo {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$msgs_table} WHERE recipient LIKE '%@example.com'" );
 		if ( $existing >= 5 ) {
-			return array( 'inserted' => 0, 'skipped' => true );
+			return array(
+				'inserted' => 0,
+				'skipped'  => true,
+			);
 		}
 
 		$now      = time();
@@ -772,16 +972,64 @@ class WRM_Demo {
 			if ( $msg_id && in_array( $msg['status'], array( 'opened', 'clicked', 'delivered' ), true ) ) {
 				$event_rows = array();
 				if ( 'opened' === $msg['status'] || 'clicked' === $msg['status'] ) {
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'sent',   'ip' => '', 'url' => '', 'user_agent' => '', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3500 ) );
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'opened', 'ip' => '203.0.113.1', 'url' => '', 'user_agent' => 'Mozilla/5.0 (Macintosh)', 'data' => null, 'created_at' => $msg['first_open_at'] ?? current_time( 'mysql' ) );
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'sent',
+						'ip'         => '',
+						'url'        => '',
+						'user_agent' => '',
+						'data'       => null,
+						'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3500 ),
+					);
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'opened',
+						'ip'         => '203.0.113.1',
+						'url'        => '',
+						'user_agent' => 'Mozilla/5.0 (Macintosh)',
+						'data'       => null,
+						'created_at' => $msg['first_open_at'] ?? current_time( 'mysql' ), // @phpstan-ignore-line
+					);
 				}
 				if ( 'clicked' === $msg['status'] ) {
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'clicked', 'ip' => '203.0.113.1', 'url' => 'https://example.com/order/WC-10042', 'user_agent' => 'Mozilla/5.0', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 750 ) );
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'clicked', 'ip' => '203.0.113.1', 'url' => 'https://example.com/track', 'user_agent' => 'Mozilla/5.0', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 600 ) );
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'clicked',
+						'ip'         => '203.0.113.1',
+						'url'        => 'https://example.com/order/WC-10042',
+						'user_agent' => 'Mozilla/5.0',
+						'data'       => null,
+						'created_at' => gmdate( 'Y-m-d H:i:s', $now - 750 ),
+					);
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'clicked',
+						'ip'         => '203.0.113.1',
+						'url'        => 'https://example.com/track',
+						'user_agent' => 'Mozilla/5.0',
+						'data'       => null,
+						'created_at' => gmdate( 'Y-m-d H:i:s', $now - 600 ),
+					);
 				}
 				if ( 'delivered' === $msg['status'] ) {
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'sent',      'ip' => '', 'url' => '', 'user_agent' => '', 'data' => null, 'created_at' => $msg['sent_at'] );
-					$event_rows[] = array( 'message_id' => $msg_id, 'event' => 'delivered', 'ip' => '', 'url' => '', 'user_agent' => 'Twilio/Webhook', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1700 ) );
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'sent',
+						'ip'         => '',
+						'url'        => '',
+						'user_agent' => '',
+						'data'       => null,
+						'created_at' => $msg['sent_at'],
+					);
+					$event_rows[] = array(
+						'message_id' => $msg_id,
+						'event'      => 'delivered',
+						'ip'         => '',
+						'url'        => '',
+						'user_agent' => 'Twilio/Webhook',
+						'data'       => null,
+						'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1700 ),
+					);
 				}
 				foreach ( $event_rows as $ev ) {
 					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
@@ -843,25 +1091,139 @@ class WRM_Demo {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$existing = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE context IN ('demo','queue','mapper','router')" );
 		if ( $existing >= 20 ) {
-			return array( 'inserted' => 0, 'skipped' => true );
+			return array(
+				'inserted' => 0,
+				'skipped'  => true,
+			);
 		}
 
 		$now  = time();
 		$logs = array(
-			array( 'level' => 'info',    'context' => 'router', 'ref_id' => 1, 'message' => '[demo-stripe-webhook] Request received — sig verified, enqueued job #1', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3601 ) ),
-			array( 'level' => 'info',    'context' => 'queue',  'ref_id' => 1, 'message' => 'Job #1 started (attempt 1/3).', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3599 ) ),
-			array( 'level' => 'info',    'context' => 'mapper', 'ref_id' => 1, 'message' => 'Mapping applied — post #42 created, email sent to alice@example.com', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3598 ) ),
-			array( 'level' => 'info',    'context' => 'queue',  'ref_id' => 1, 'message' => 'Job #1 completed successfully.', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3597 ) ),
-			array( 'level' => 'info',    'context' => 'router', 'ref_id' => 2, 'message' => '[demo-hubspot-contact] Request received — sig verification failed (skipping), enqueued job #2', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1801 ) ),
-			array( 'level' => 'warning', 'context' => 'mapper', 'ref_id' => 2, 'message' => 'Chain skipped — conditions not met (phone not_empty check failed)', 'data' => wp_json_encode( array( 'type' => 'sms', 'condition' => array( 'field' => 'properties.phone', 'op' => 'not_empty' ) ) ), 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1799 ) ),
-			array( 'level' => 'info',    'context' => 'queue',  'ref_id' => 3, 'message' => 'Job #3 failed on attempt 2; retry in 10 min.', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 880 ) ),
-			array( 'level' => 'error',   'context' => 'queue',  'ref_id' => 3, 'message' => 'cURL error 6: Could not resolve host: httpbin.org (Demo simulated error)', 'data' => wp_json_encode( array( 'attempt' => 2, 'max_attempts' => 3 ) ), 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 879 ) ),
-			array( 'level' => 'error',   'context' => 'queue',  'ref_id' => 4, 'message' => 'Job #4 permanently failed after 3 attempt(s).', 'data' => wp_json_encode( array( 'error' => 'Function wrm_demo_log_event not in allowlist' ) ), 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 597 ) ),
-			array( 'level' => 'warning', 'context' => 'mapper', 'ref_id' => 4, 'message' => 'Blocked unregistered callback — wrm_demo_log_event. Add WRM_Mapper::register_callback() to plugins_loaded.', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 598 ) ),
-			array( 'level' => 'info',    'context' => 'queue',  'ref_id' => 4, 'message' => 'Job #4 dispatched to dead-letter route "demo-dead-letter-queue".', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 596 ) ),
-			array( 'level' => 'debug',   'context' => 'router', 'ref_id' => 5, 'message' => '[demo-conditional-chains] Chain skipped — conditions not met (amount gte 500 check passed, event contains purchase check passed)', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 299 ) ),
-			array( 'level' => 'info',    'context' => 'router', 'ref_id' => 6, 'message' => '[demo-conditional-chains] Received refund event — webhook chain dispatched to httpbin.org', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 59 ) ),
-			array( 'level' => 'info',    'context' => 'queue',  'ref_id' => 5, 'message' => 'Job #5 queued — waiting for next cron sweep.', 'data' => null, 'created_at' => gmdate( 'Y-m-d H:i:s', $now - 29 ) ),
+			array(
+				'level'      => 'info',
+				'context'    => 'router',
+				'ref_id'     => 1,
+				'message'    => '[demo-stripe-webhook] Request received — sig verified, enqueued job #1',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3601 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'queue',
+				'ref_id'     => 1,
+				'message'    => 'Job #1 started (attempt 1/3).',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3599 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'mapper',
+				'ref_id'     => 1,
+				'message'    => 'Mapping applied — post #42 created, email sent to alice@example.com',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3598 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'queue',
+				'ref_id'     => 1,
+				'message'    => 'Job #1 completed successfully.',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 3597 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'router',
+				'ref_id'     => 2,
+				'message'    => '[demo-hubspot-contact] Request received — sig verification failed (skipping), enqueued job #2',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1801 ),
+			),
+			array(
+				'level'      => 'warning',
+				'context'    => 'mapper',
+				'ref_id'     => 2,
+				'message'    => 'Chain skipped — conditions not met (phone not_empty check failed)',
+				'data'       => wp_json_encode(
+					array(
+						'type'      => 'sms',
+						'condition' => array(
+							'field' => 'properties.phone',
+							'op'    => 'not_empty',
+						),
+					)
+				),
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 1799 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'queue',
+				'ref_id'     => 3,
+				'message'    => 'Job #3 failed on attempt 2; retry in 10 min.',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 880 ),
+			),
+			array(
+				'level'      => 'error',
+				'context'    => 'queue',
+				'ref_id'     => 3,
+				'message'    => 'cURL error 6: Could not resolve host: httpbin.org (Demo simulated error)',
+				'data'       => wp_json_encode(
+					array(
+						'attempt'      => 2,
+						'max_attempts' => 3,
+					)
+				),
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 879 ),
+			),
+			array(
+				'level'      => 'error',
+				'context'    => 'queue',
+				'ref_id'     => 4,
+				'message'    => 'Job #4 permanently failed after 3 attempt(s).',
+				'data'       => wp_json_encode( array( 'error' => 'Function wrm_demo_log_event not in allowlist' ) ),
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 597 ),
+			),
+			array(
+				'level'      => 'warning',
+				'context'    => 'mapper',
+				'ref_id'     => 4,
+				'message'    => 'Blocked unregistered callback — wrm_demo_log_event. Add WRM_Mapper::register_callback() to plugins_loaded.',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 598 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'queue',
+				'ref_id'     => 4,
+				'message'    => 'Job #4 dispatched to dead-letter route "demo-dead-letter-queue".',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 596 ),
+			),
+			array(
+				'level'      => 'debug',
+				'context'    => 'router',
+				'ref_id'     => 5,
+				'message'    => '[demo-conditional-chains] Chain skipped — conditions not met (amount gte 500 check passed, event contains purchase check passed)',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 299 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'router',
+				'ref_id'     => 6,
+				'message'    => '[demo-conditional-chains] Received refund event — webhook chain dispatched to httpbin.org',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 59 ),
+			),
+			array(
+				'level'      => 'info',
+				'context'    => 'queue',
+				'ref_id'     => 5,
+				'message'    => 'Job #5 queued — waiting for next cron sweep.',
+				'data'       => null,
+				'created_at' => gmdate( 'Y-m-d H:i:s', $now - 29 ),
+			),
 		);
 
 		$inserted = 0;
@@ -887,7 +1249,16 @@ class WRM_Demo {
 	// -------------------------------------------------------------------------
 
 	private static function get_demo_mapping_id( string $title ): int {
-		$post = get_page_by_title( $title, OBJECT, 'wrm_mapping' );
-		return $post ? (int) $post->ID : 0;
+		$q = new WP_Query(
+			array(
+				'post_type'      => 'wrm_mapping',
+				'title'          => $title,
+				'post_status'    => 'any',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+			)
+		);
+		return $q->have_posts() ? (int) $q->posts[0] : 0;
 	}
 }

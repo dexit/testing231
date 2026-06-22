@@ -133,7 +133,7 @@ class WRM_Mapping_Editor {
 		$route_slug = get_post_meta( $post->ID, 'wrm_route_slug', true ) ?: '';
 
 		global $wpdb;
-		$table  = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
+		$table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$routes = $wpdb->get_results( "SELECT slug, label FROM {$table} ORDER BY slug ASC", ARRAY_A ) ?? array();
 		?>
@@ -184,7 +184,14 @@ class WRM_Mapping_Editor {
 			}
 
 			update_post_meta( $post_id, 'wrm_config', $raw_config );
-			WRM_Logger::info( 'admin', 'Mapping config saved', array( 'post_id' => $post_id, 'ref_id' => $post_id ) );
+			WRM_Logger::info(
+				'admin',
+				'Mapping config saved',
+				array(
+					'post_id' => $post_id,
+					'ref_id'  => $post_id,
+				)
+			);
 		}
 
 		// Save route association

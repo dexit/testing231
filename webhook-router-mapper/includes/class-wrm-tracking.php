@@ -58,7 +58,10 @@ class WRM_Tracking {
 			)
 		);
 
-		return array( 'id' => (int) $wpdb->insert_id, 'token' => $token );
+		return array(
+			'id'    => (int) $wpdb->insert_id,
+			'token' => $token,
+		);
 	}
 
 	/**
@@ -66,7 +69,7 @@ class WRM_Tracking {
 	 */
 	public static function update_message( int $id, array $fields ): void {
 		global $wpdb;
-		$table = $wpdb->prefix . WRM_Installer::MESSAGES_TABLE;
+		$table   = $wpdb->prefix . WRM_Installer::MESSAGES_TABLE;
 		$allowed = array();
 		if ( isset( $fields['status'] ) ) {
 			$allowed['status'] = sanitize_key( $fields['status'] );
@@ -139,8 +142,18 @@ class WRM_Tracking {
 
 		// Roll up counters / status transitions.
 		if ( 'open' === $event ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query( $wpdb->prepare( "UPDATE {$messages_table} SET open_count = open_count + 1, first_open_at = COALESCE(first_open_at, %s), status = IF(status IN ('clicked','bounced','failed','complaint'), status, 'opened') WHERE id = %d", current_time( 'mysql', true ), $message_id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$messages_table}
+					 SET open_count = open_count + 1,
+					     first_open_at = COALESCE(first_open_at, %s),
+					     status = IF(status IN ('clicked','bounced','failed','complaint'), status, 'opened')
+					 WHERE id = %d",
+					current_time( 'mysql', true ),
+					$message_id
+				)
+			);
 		} elseif ( 'click' === $event ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$wpdb->query( $wpdb->prepare( "UPDATE {$messages_table} SET click_count = click_count + 1, status = 'clicked' WHERE id = %d", $message_id ) );
@@ -280,8 +293,8 @@ class WRM_Tracking {
 			return new WP_REST_Response( array( 'error' => 'Invalid signature.' ), 403 );
 		}
 
-		$body = $req->get_json_params();
-		if ( ! is_array( $body ) ) {
+		$body = (array) $req->get_json_params();
+		if ( empty( $body ) ) {
 			// Twilio posts form-encoded.
 			$body = $req->get_body_params() ?: array();
 		}
@@ -301,7 +314,13 @@ class WRM_Tracking {
 		}
 
 		WRM_Logger::info( self::CONTEXT, "Status webhook from {$provider}: {$applied} event(s) applied.", array( 'provider' => $provider ) );
-		return new WP_REST_Response( array( 'ok' => true, 'applied' => $applied ), 200 );
+		return new WP_REST_Response(
+			array(
+				'ok'      => true,
+				'applied' => $applied,
+			),
+			200
+		);
 	}
 
 	/**
@@ -325,24 +344,32 @@ class WRM_Tracking {
 			case 'twilio':
 				$status = $map_status( (string) ( $body['MessageStatus'] ?? $body['SmsStatus'] ?? '' ) );
 				$sid    = (string) ( $body['MessageSid'] ?? $body['SmsSid'] ?? '' );
-				return $status && $sid ? array( array( 'provider_message_id' => $sid, 'event' => $status ) ) : array();
+				return $status && $sid ? array(
+					array(
+						'provider_message_id' => $sid,
+						'event'               => $status,
+					),
+				) : array();
 
 			case 'sendgrid':
 				// SendGrid posts an array of event objects.
-				$out = array();
+				$out  = array();
 				$rows = isset( $body[0] ) ? $body : array( $body );
 				foreach ( $rows as $row ) {
 					$status = $map_status( (string) ( $row['event'] ?? '' ) );
 					$pmid   = (string) ( $row['sg_message_id'] ?? $row['smtp-id'] ?? '' );
 					if ( $status && $pmid ) {
-						$out[] = array( 'provider_message_id' => $pmid, 'event' => $status );
+						$out[] = array(
+							'provider_message_id' => $pmid,
+							'event'               => $status,
+						);
 					}
 				}
 				return $out;
 
 			case 'whatsapp':
 				// Meta WhatsApp Cloud status webhook.
-				$out = array();
+				$out     = array();
 				$entries = $body['entry'] ?? array();
 				foreach ( (array) $entries as $entry ) {
 					foreach ( (array) ( $entry['changes'] ?? array() ) as $change ) {
@@ -350,7 +377,10 @@ class WRM_Tracking {
 							$status = $map_status( (string) ( $st['status'] ?? '' ) );
 							$pmid   = (string) ( $st['id'] ?? '' );
 							if ( $status && $pmid ) {
-								$out[] = array( 'provider_message_id' => $pmid, 'event' => $status );
+								$out[] = array(
+									'provider_message_id' => $pmid,
+									'event'               => $status,
+								);
 							}
 						}
 					}
@@ -361,7 +391,12 @@ class WRM_Tracking {
 				// Generic shape: { provider_message_id, status }
 				$status = $map_status( (string) ( $body['status'] ?? '' ) );
 				$pmid   = (string) ( $body['provider_message_id'] ?? $body['message_id'] ?? '' );
-				return $status && $pmid ? array( array( 'provider_message_id' => $pmid, 'event' => $status ) ) : array();
+				return $status && $pmid ? array(
+					array(
+						'provider_message_id' => $pmid,
+						'event'               => $status,
+					),
+				) : array();
 		}
 	}
 
@@ -414,7 +449,7 @@ class WRM_Tracking {
 		global $wpdb;
 		$table = $wpdb->prefix . WRM_Installer::MESSAGES_TABLE;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results( "SELECT status, COUNT(*) AS cnt FROM {$table} GROUP BY status", ARRAY_A ) ?? array();
+		$rows   = $wpdb->get_results( "SELECT status, COUNT(*) AS cnt FROM {$table} GROUP BY status", ARRAY_A ) ?? array();
 		$counts = array_fill_keys( array( 'queued', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'complaint' ), 0 );
 		foreach ( $rows as $row ) {
 			$counts[ $row['status'] ] = (int) $row['cnt'];

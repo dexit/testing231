@@ -1,5 +1,6 @@
 <?php
-if ( ! defined( 'ABSPATH' ) ) { exit; }
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; }
 
 class WRM_Metrics {
 
@@ -12,23 +13,26 @@ class WRM_Metrics {
 		$table  = $wpdb->prefix . WRM_Installer::METRICS_TABLE;
 		$bucket = gmdate( 'Y-m-d H:00:00' );
 		$slug   = sanitize_title( $route_slug );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table and column names are internal constants, not user input.
 		$wpdb->query(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"INSERT INTO {$table} (route_slug, bucket, {$field})
 				 VALUES (%s, %s, %d)
 				 ON DUPLICATE KEY UPDATE {$field} = {$field} + %d",
-				$slug, $bucket, $amount, $amount
+				$slug,
+				$bucket,
+				$amount,
+				$amount
 			)
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	public static function get_hourly( string $route_slug, int $hours = 24 ): array {
 		global $wpdb;
-		$table  = $wpdb->prefix . WRM_Installer::METRICS_TABLE;
-		$slug   = sanitize_title( $route_slug );
-		$since  = gmdate( 'Y-m-d H:00:00', time() - ( $hours * 3600 ) );
+		$table = $wpdb->prefix . WRM_Installer::METRICS_TABLE;
+		$slug  = sanitize_title( $route_slug );
+		$since = gmdate( 'Y-m-d H:00:00', time() - ( $hours * 3600 ) );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$rows = $wpdb->get_results(
@@ -37,7 +41,8 @@ class WRM_Metrics {
 				 FROM {$table}
 				 WHERE route_slug = %s AND bucket >= %s
 				 ORDER BY bucket ASC",
-				$slug, $since
+				$slug,
+				$since
 			),
 			ARRAY_A
 		);
@@ -50,7 +55,7 @@ class WRM_Metrics {
 
 		$result = array();
 		for ( $i = $hours - 1; $i >= 0; $i-- ) {
-			$key = gmdate( 'Y-m-d H:00:00', time() - ( $i * 3600 ) );
+			$key      = gmdate( 'Y-m-d H:00:00', time() - ( $i * 3600 ) );
 			$result[] = isset( $map[ $key ] ) ? $map[ $key ] : array(
 				'bucket'      => $key,
 				'captures'    => 0,

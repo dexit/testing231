@@ -53,11 +53,11 @@ class WRM_Messaging {
 	 *     'error'      => string,   // present only on failure / skip
 	 *   ]
 	 *
-	 * @param string  $provider Provider key.
-	 * @param array   $config   Provider credentials / settings.
-	 * @param string  $to       Destination address (phone number, etc.).
-	 * @param string  $body     Message body.
-	 * @param array   $context  Optional extra context passed through to the webhook provider.
+	 * @param string $provider Provider key.
+	 * @param array  $config   Provider credentials / settings.
+	 * @param string $to       Destination address (phone number, etc.).
+	 * @param string $body     Message body.
+	 * @param array  $context  Optional extra context passed through to the webhook provider.
 	 * @return array
 	 */
 	public static function send(
@@ -114,8 +114,8 @@ class WRM_Messaging {
 	 */
 	private static function twilio( array $config, string $to, string $body ): array {
 		$sid   = (string) ( $config['account_sid'] ?? '' );
-		$token = (string) ( $config['auth_token']  ?? '' );
-		$from  = (string) ( $config['from']         ?? '' );
+		$token = (string) ( $config['auth_token'] ?? '' );
+		$from  = (string) ( $config['from'] ?? '' );
 
 		if ( '' === $sid || '' === $token || '' === $from ) {
 			return self::skipped( 'twilio', 'missing_credentials' );
@@ -158,7 +158,11 @@ class WRM_Messaging {
 		WRM_Logger::info(
 			self::CONTEXT,
 			'twilio: message ' . ( $ok ? 'sent' : 'failed' ),
-			array( 'code' => $code, 'message_id' => $msg_id, 'to' => $to )
+			array(
+				'code'       => $code,
+				'message_id' => $msg_id,
+				'to'         => $to,
+			)
 		);
 
 		if ( ! $ok ) {
@@ -179,8 +183,8 @@ class WRM_Messaging {
 	 */
 	private static function whatsapp( array $config, string $to, string $body ): array {
 		$phone_id    = (string) ( $config['phone_number_id'] ?? '' );
-		$token       = (string) ( $config['access_token']    ?? '' );
-		$api_version = (string) ( $config['api_version']     ?? 'v19.0' );
+		$token       = (string) ( $config['access_token'] ?? '' );
+		$api_version = (string) ( $config['api_version'] ?? 'v19.0' );
 
 		if ( '' === $phone_id || '' === $token ) {
 			return self::skipped( 'whatsapp', 'missing_credentials' );
@@ -231,7 +235,11 @@ class WRM_Messaging {
 		WRM_Logger::info(
 			self::CONTEXT,
 			'whatsapp: message ' . ( $ok ? 'sent' : 'failed' ),
-			array( 'code' => $code, 'message_id' => $msg_id, 'to' => $to )
+			array(
+				'code'       => $code,
+				'message_id' => $msg_id,
+				'to'         => $to,
+			)
 		);
 
 		if ( ! $ok ) {
@@ -252,8 +260,8 @@ class WRM_Messaging {
 	 */
 	private static function sinch( array $config, string $to, string $body ): array {
 		$service_plan_id = (string) ( $config['service_plan_id'] ?? '' );
-		$api_token       = (string) ( $config['api_token']       ?? '' );
-		$from            = (string) ( $config['from']             ?? '' );
+		$api_token       = (string) ( $config['api_token'] ?? '' );
+		$from            = (string) ( $config['from'] ?? '' );
 
 		if ( '' === $service_plan_id || '' === $api_token || '' === $from ) {
 			return self::skipped( 'sinch', 'missing_credentials' );
@@ -298,7 +306,11 @@ class WRM_Messaging {
 		WRM_Logger::info(
 			self::CONTEXT,
 			'sinch: message ' . ( $ok ? 'sent' : 'failed' ),
-			array( 'code' => $code, 'message_id' => $msg_id, 'to' => $to )
+			array(
+				'code'       => $code,
+				'message_id' => $msg_id,
+				'to'         => $to,
+			)
 		);
 
 		if ( ! $ok ) {
@@ -318,7 +330,7 @@ class WRM_Messaging {
 	 * Send via MessageMedia SMS API.
 	 */
 	private static function messagemedia( array $config, string $to, string $body ): array {
-		$api_key    = (string) ( $config['api_key']    ?? '' );
+		$api_key    = (string) ( $config['api_key'] ?? '' );
 		$api_secret = (string) ( $config['api_secret'] ?? '' );
 
 		if ( '' === $api_key || '' === $api_secret ) {
@@ -365,7 +377,11 @@ class WRM_Messaging {
 		WRM_Logger::info(
 			self::CONTEXT,
 			'messagemedia: message ' . ( $ok ? 'sent' : 'failed' ),
-			array( 'code' => $code, 'message_id' => $msg_id, 'to' => $to )
+			array(
+				'code'       => $code,
+				'message_id' => $msg_id,
+				'to'         => $to,
+			)
 		);
 
 		if ( ! $ok ) {
@@ -385,14 +401,14 @@ class WRM_Messaging {
 	 * Send via a generic webhook endpoint.
 	 */
 	private static function webhook( array $config, string $to, string $body, array $context ): array {
-		$url            = (string) ( $config['url']            ?? '' );
+		$url            = (string) ( $config['url'] ?? '' );
 		$signing_secret = (string) ( $config['signing_secret'] ?? '' );
 
 		if ( '' === $url ) {
 			return self::skipped( 'webhook', 'missing_url' );
 		}
 
-		$payload  = array(
+		$payload   = array(
 			'to'      => $to,
 			'body'    => $body,
 			'context' => $context,
@@ -419,25 +435,32 @@ class WRM_Messaging {
 			WRM_Logger::error(
 				self::CONTEXT,
 				'webhook: wp_remote_post error',
-				array( 'error' => $response->get_error_message(), 'url' => $url )
+				array(
+					'error' => $response->get_error_message(),
+					'url'   => $url,
+				)
 			);
 			return self::failed( 'webhook', 0, $response->get_error_message() );
 		}
 
-		$code         = (int) wp_remote_retrieve_response_code( $response );
-		$raw_body     = wp_remote_retrieve_body( $response );
-		$decoded      = self::parse_json_body( $raw_body );
-		$ok           = $code >= 200 && $code < 300;
-		$msg_id       = is_array( $decoded ) ? (string) ( $decoded['message_id'] ?? '' ) : '';
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+		$decoded  = self::parse_json_body( $raw_body );
+		$ok       = $code >= 200 && $code < 300;
+		$msg_id   = is_array( $decoded ) ? (string) ( $decoded['message_id'] ?? '' ) : ''; // @phpstan-ignore-line
 
 		WRM_Logger::info(
 			self::CONTEXT,
 			'webhook: request ' . ( $ok ? 'sent' : 'failed' ),
-			array( 'code' => $code, 'message_id' => $msg_id, 'url' => $url )
+			array(
+				'code'       => $code,
+				'message_id' => $msg_id,
+				'url'        => $url,
+			)
 		);
 
 		if ( ! $ok ) {
-			$error = is_array( $decoded )
+			$error = is_array( $decoded ) // @phpstan-ignore-line
 				? (string) ( $decoded['error'] ?? $decoded['message'] ?? 'http_error' )
 				: 'http_error';
 			return self::failed( 'webhook', $code, $error );
@@ -485,7 +508,10 @@ class WRM_Messaging {
 		WRM_Logger::warning(
 			self::CONTEXT,
 			sprintf( '%s: skipped — %s', $provider, $reason ),
-			array( 'provider' => $provider, 'reason' => $reason )
+			array(
+				'provider' => $provider,
+				'reason'   => $reason,
+			)
 		);
 
 		return array(

@@ -18,61 +18,59 @@ class WRM_Admin {
 	}
 
 	public static function enqueue_shared( string $hook ): void {
-		$wrm_pages = array(
-			'toplevel_page_wrm-routes',
-			'webhook-router_page_wrm-captures',
-			'webhook-router_page_wrm-jobs',
-			'webhook-router_page_wrm-logs',
-			'webhook-router_page_wrm-schedules',
-			'webhook-router_page_wrm-functions',
-			'webhook-router_page_wrm-messages',
+		$tab_map = array(
+			'toplevel_page_wrm-start'           => 'start',
+			'webhook-router_page_wrm-dashboard' => 'dashboard',
+			'webhook-router_page_wrm-routes'    => 'routes',
+			'webhook-router_page_wrm-captures'  => 'captures',
+			'webhook-router_page_wrm-jobs'      => 'jobs',
+			'webhook-router_page_wrm-logs'      => 'logs',
+			'webhook-router_page_wrm-schedules' => 'schedules',
+			'webhook-router_page_wrm-functions' => 'functions',
+			'webhook-router_page_wrm-messages'  => 'messages',
 		);
-		if ( ! in_array( $hook, $wrm_pages, true ) ) {
+		if ( ! isset( $tab_map[ $hook ] ) ) {
 			return;
 		}
 		wp_enqueue_style( 'wrm-admin', WRM_PLUGIN_URL . 'assets/css/wrm-admin.css', array(), WRM_VERSION );
 
 		$asset_file = WRM_PLUGIN_DIR . 'build/wrm-admin-app.asset.php';
-		if ( file_exists( $asset_file ) ) {
-			$asset = require $asset_file;
-			wp_enqueue_script(
-				'wrm-admin-app',
-				WRM_PLUGIN_URL . 'build/wrm-admin-app.js',
-				$asset['dependencies'],
-				$asset['version'],
-				true
-			);
-			$tab_map = array(
-				'toplevel_page_wrm-routes'          => 'routes',
-				'webhook-router_page_wrm-captures'  => 'captures',
-				'webhook-router_page_wrm-jobs'      => 'jobs',
-				'webhook-router_page_wrm-logs'      => 'logs',
-				'webhook-router_page_wrm-schedules' => 'schedules',
-				'webhook-router_page_wrm-functions' => 'functions',
-				'webhook-router_page_wrm-messages'  => 'messages',
-			);
-			$initial_tab = $tab_map[ $hook ] ?? 'routes';
-			// Show Get Started for fresh installs with no routes yet.
-			if ( 'routes' === $initial_tab ) {
-				global $wpdb;
-				$routes_table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$route_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$routes_table}" );
-				if ( 0 === $route_count ) {
-					$initial_tab = 'start';
-				}
-			}
-			wp_localize_script(
-				'wrm-admin-app',
-				'wrmAdminData',
-				array(
-					'apiRoot'    => esc_url_raw( rest_url() ),
-					'nonce'      => wp_create_nonce( 'wp_rest' ),
-					'initialTab' => $initial_tab,
-					'restBase'   => rest_url( 'wrm/v1' ),
-				)
-			);
+		if ( ! file_exists( $asset_file ) ) {
+			return;
 		}
+
+		$asset = require $asset_file;
+		wp_enqueue_script(
+			'wrm-admin-app',
+			WRM_PLUGIN_URL . 'build/wrm-admin-app.js',
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		$initial_tab = $tab_map[ $hook ];
+		// On fresh installs with no routes, override routes → start.
+		if ( 'routes' === $initial_tab ) {
+			global $wpdb;
+			$routes_table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$route_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$routes_table}" );
+			if ( 0 === $route_count ) {
+				$initial_tab = 'start';
+			}
+		}
+		wp_localize_script(
+			'wrm-admin-app',
+			'wrmAdminData',
+			array(
+				'apiRoot'    => esc_url_raw( rest_url() ),
+				'nonce'      => wp_create_nonce( 'wp_rest' ),
+				'initialTab' => $initial_tab,
+				'restBase'   => rest_url( 'wrm/v1' ),
+				'pluginUrl'  => esc_url_raw( WRM_PLUGIN_URL ),
+				'version'    => WRM_VERSION,
+			)
+		);
 	}
 
 	public static function register_pages(): void {
@@ -80,19 +78,29 @@ class WRM_Admin {
 			__( 'Webhook Router', 'wrm' ),
 			__( 'Webhook Router', 'wrm' ),
 			'manage_options',
-			'wrm-routes',
-			array( __CLASS__, 'page_routes' ),
+			'wrm-start',
+			array( __CLASS__, 'page_start' ),
 			'dashicons-rest-api',
 			56
 		);
-		add_submenu_page( 'wrm-routes', __( 'Routes', 'wrm' ),   __( 'Routes', 'wrm' ),   'manage_options', 'wrm-routes',   array( __CLASS__, 'page_routes' ) );
-		add_submenu_page( 'wrm-routes', __( 'Mappings', 'wrm' ), __( 'Mappings', 'wrm' ), 'manage_options', 'edit.php?post_type=wrm_mapping' );
-		add_submenu_page( 'wrm-routes', __( 'Captures', 'wrm' ), __( 'Captures', 'wrm' ), 'manage_options', 'wrm-captures', array( __CLASS__, 'page_captures' ) );
-		add_submenu_page( 'wrm-routes', __( 'Jobs', 'wrm' ),      __( 'Jobs', 'wrm' ),      'manage_options', 'wrm-jobs',      array( __CLASS__, 'page_jobs' ) );
-		add_submenu_page( 'wrm-routes', __( 'Schedules', 'wrm' ), __( 'Schedules', 'wrm' ), 'manage_options', 'wrm-schedules', array( __CLASS__, 'page_schedules' ) );
-		add_submenu_page( 'wrm-routes', __( 'Messages', 'wrm' ),  __( 'Messages', 'wrm' ),  'manage_options', 'wrm-messages',  array( __CLASS__, 'page_messages' ) );
-		add_submenu_page( 'wrm-routes', __( 'Functions', 'wrm' ), __( 'Functions', 'wrm' ), 'manage_options', 'wrm-functions', array( __CLASS__, 'page_functions' ) );
-		add_submenu_page( 'wrm-routes', __( 'Logs', 'wrm' ),      __( 'Logs', 'wrm' ),      'manage_options', 'wrm-logs',      array( __CLASS__, 'page_logs' ) );
+		add_submenu_page( 'wrm-start', __( 'Get Started', 'wrm' ), __( '✦ Get Started', 'wrm' ), 'manage_options', 'wrm-start', array( __CLASS__, 'page_start' ) );
+		add_submenu_page( 'wrm-start', __( 'Dashboard', 'wrm' ), __( 'Dashboard', 'wrm' ), 'manage_options', 'wrm-dashboard', array( __CLASS__, 'page_dashboard' ) );
+		add_submenu_page( 'wrm-start', __( 'Routes', 'wrm' ), __( 'Routes', 'wrm' ), 'manage_options', 'wrm-routes', array( __CLASS__, 'page_routes' ) );
+		add_submenu_page( 'wrm-start', __( 'Mappings', 'wrm' ), __( 'Mappings', 'wrm' ), 'manage_options', 'edit.php?post_type=wrm_mapping' );
+		add_submenu_page( 'wrm-start', __( 'Captures', 'wrm' ), __( 'Captures', 'wrm' ), 'manage_options', 'wrm-captures', array( __CLASS__, 'page_captures' ) );
+		add_submenu_page( 'wrm-start', __( 'Jobs', 'wrm' ), __( 'Jobs', 'wrm' ), 'manage_options', 'wrm-jobs', array( __CLASS__, 'page_jobs' ) );
+		add_submenu_page( 'wrm-start', __( 'Schedules', 'wrm' ), __( 'Schedules', 'wrm' ), 'manage_options', 'wrm-schedules', array( __CLASS__, 'page_schedules' ) );
+		add_submenu_page( 'wrm-start', __( 'Messages', 'wrm' ), __( 'Messages', 'wrm' ), 'manage_options', 'wrm-messages', array( __CLASS__, 'page_messages' ) );
+		add_submenu_page( 'wrm-start', __( 'Functions', 'wrm' ), __( 'Functions', 'wrm' ), 'manage_options', 'wrm-functions', array( __CLASS__, 'page_functions' ) );
+		add_submenu_page( 'wrm-start', __( 'Logs', 'wrm' ), __( 'Logs', 'wrm' ), 'manage_options', 'wrm-logs', array( __CLASS__, 'page_logs' ) );
+	}
+
+	public static function page_start(): void {
+		self::render_app_root();
+	}
+
+	public static function page_dashboard(): void {
+		self::render_app_root();
 	}
 
 	public static function page_schedules(): void {
@@ -134,22 +142,25 @@ class WRM_Admin {
 	}
 
 	private static function handle_route_action(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Nonce verified in page_routes() before this call.
 		$action = sanitize_key( $_POST['wrm_action'] ?? '' );
 		$slug   = sanitize_title( $_POST['wrm_slug'] ?? '' );
 
 		switch ( $action ) {
 			case 'create':
-				WRM_Router::insert_route( array(
-					'slug'        => sanitize_title( $_POST['new_slug'] ?? '' ),
-					'label'       => sanitize_text_field( $_POST['new_label'] ?? '' ),
-					'methods'     => sanitize_text_field( $_POST['new_methods'] ?? 'POST' ),
-					'provider'    => sanitize_key( $_POST['new_provider'] ?? 'custom' ),
-					'auth_token'  => sanitize_text_field( $_POST['new_auth_token'] ?? '' ),
-					'rate_limit'  => (int) ( $_POST['new_rate_limit'] ?? 0 ),
-					'rate_window' => (int) ( $_POST['new_rate_window'] ?? 60 ),
-					'run_mode'    => sanitize_key( $_POST['new_run_mode'] ?? 'async' ),
-					'mapping_id'  => (int) ( $_POST['new_mapping_id'] ?? 0 ),
-				) );
+				WRM_Router::insert_route(
+					array(
+						'slug'        => sanitize_title( $_POST['new_slug'] ?? '' ),
+						'label'       => sanitize_text_field( $_POST['new_label'] ?? '' ),
+						'methods'     => sanitize_text_field( $_POST['new_methods'] ?? 'POST' ),
+						'provider'    => sanitize_key( $_POST['new_provider'] ?? 'custom' ),
+						'auth_token'  => sanitize_text_field( $_POST['new_auth_token'] ?? '' ),
+						'rate_limit'  => (int) ( $_POST['new_rate_limit'] ?? 0 ),
+						'rate_window' => (int) ( $_POST['new_rate_window'] ?? 60 ),
+						'run_mode'    => sanitize_key( $_POST['new_run_mode'] ?? 'async' ),
+						'mapping_id'  => (int) ( $_POST['new_mapping_id'] ?? 0 ),
+					)
+				);
 				wp_safe_redirect( add_query_arg( 'wrm_saved', '1', menu_page_url( 'wrm-routes', false ) ) );
 				exit;
 
@@ -170,6 +181,7 @@ class WRM_Admin {
 				wp_safe_redirect( add_query_arg( 'wrm_deleted', '1', menu_page_url( 'wrm-routes', false ) ) );
 				exit;
 		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
 	}
 
 	// -------------------------------------------------------------------------
