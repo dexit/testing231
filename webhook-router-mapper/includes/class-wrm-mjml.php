@@ -17,8 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WRM_MJML {
 
-	const string API_ENDPOINT  = 'https://api.mjml.io/v1/render';
-	const string OPT_APP_ID    = 'wrm_mjml_app_id';
+	const string API_ENDPOINT   = 'https://api.mjml.io/v1/render';
+	const string OPT_APP_ID     = 'wrm_mjml_app_id';
 	const string OPT_APP_SECRET = 'wrm_mjml_app_secret';
 
 	// -------------------------------------------------------------------------
@@ -136,7 +136,10 @@ class WRM_MJML {
 			WRM_Logger::error(
 				'mjml',
 				'MJML API returned non-2xx status.',
-				array( 'status_code' => $status_code, 'body' => $body )
+				array(
+					'status_code' => $status_code,
+					'body'        => $body,
+				)
 			);
 			return null;
 		}
@@ -168,7 +171,10 @@ class WRM_MJML {
 		WRM_Logger::error(
 			'mjml',
 			'MJML API response missing html field.',
-			array( 'status_code' => $status_code, 'decoded' => $decoded )
+			array(
+				'status_code' => $status_code,
+				'decoded'     => $decoded,
+			)
 		);
 		return null;
 	}

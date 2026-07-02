@@ -259,9 +259,9 @@ class WRM_Installer {
 				'public'          => false,
 				'show_ui'         => true,
 				'show_in_menu'    => false,
-				'capability_type'   => array( 'wrm_mapping', 'wrm_mappings' ),
-				'map_meta_cap'      => true,
-				'capabilities'      => array(
+				'capability_type' => array( 'wrm_mapping', 'wrm_mappings' ),
+				'map_meta_cap'    => true,
+				'capabilities'    => array(
 					'edit_post'              => 'manage_options',
 					'edit_posts'             => 'manage_options',
 					'edit_others_posts'      => 'manage_options',

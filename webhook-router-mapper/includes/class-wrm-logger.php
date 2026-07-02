@@ -57,7 +57,7 @@ class WRM_Logger {
 					'line'            => $e->getLine(),
 					'trace'           => array_slice(
 						array_map(
-							static fn( array $f ) => ( $f['file'] ?? '' ) . ':' . ( $f['line'] ?? '' ) . ' ' . ( $f['function'] ?? '' ),
+							static fn( array $f ) => ( $f['file'] ?? '' ) . ':' . ( $f['line'] ?? '' ) . ' ' . $f['function'],
 							$e->getTrace()
 						),
 						0,
@@ -76,7 +76,13 @@ class WRM_Logger {
 			self::ERROR,
 			$context,
 			$err->get_error_message(),
-			array_merge( $data, array( 'code' => $err->get_error_code(), 'data' => $err->get_error_data() ) )
+			array_merge(
+				$data,
+				array(
+					'code' => $err->get_error_code(),
+					'data' => $err->get_error_data(),
+				)
+			)
 		);
 	}
 
@@ -112,7 +118,7 @@ class WRM_Logger {
 		$params[] = $per_page;
 		$params[] = $offset;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Table name is an internal constant, not user input. Spread operator confuses placeholder count.
 		return $wpdb->get_results(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d", ...$params ),
 			ARRAY_A
@@ -133,13 +139,14 @@ class WRM_Logger {
 	public static function purge( int $keep_rows = 1000 ): int {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is an internal constant, not user input.
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE id NOT IN (SELECT id FROM (SELECT id FROM {$table} ORDER BY id DESC LIMIT %d) t)",
 				$keep_rows
 			)
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return (int) $wpdb->rows_affected;
 	}
 

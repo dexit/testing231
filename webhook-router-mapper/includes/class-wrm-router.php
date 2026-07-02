@@ -66,7 +66,14 @@ class WRM_Router {
 	private static function handle_request( object $route, WP_REST_Request $req ): WP_REST_Response {
 		// IP access check
 		if ( ! self::check_ip_access( $route, $req ) ) {
-			WRM_Logger::warning( 'router', 'IP blocked', array( 'ip' => $_SERVER['REMOTE_ADDR'] ?? '', 'route' => $route->slug ) );
+			WRM_Logger::warning(
+				'router',
+				'IP blocked',
+				array(
+					'ip'    => $_SERVER['REMOTE_ADDR'] ?? '',
+					'route' => $route->slug,
+				)
+			);
 			return new WP_REST_Response( array( 'status' => 'forbidden' ), 403 );
 		}
 
@@ -91,7 +98,13 @@ class WRM_Router {
 		WRM_Metrics::increment( $route->slug, 'captures' );
 
 		if ( ! (int) $route->mapping_id ) {
-			return new WP_REST_Response( array( 'status' => 'captured', 'capture_id' => $capture_id ), 200 );
+			return new WP_REST_Response(
+				array(
+					'status'     => 'captured',
+					'capture_id' => $capture_id,
+				),
+				200
+			);
 		}
 
 		if ( 'sync' === $route->run_mode ) {
@@ -101,7 +114,14 @@ class WRM_Router {
 		}
 
 		$job_id = WRM_Job_Queue::enqueue( $route->slug, $capture_id, (int) $route->mapping_id );
-		return new WP_REST_Response( array( 'status' => 'queued', 'job_id' => $job_id, 'capture_id' => $capture_id ), 202 );
+		return new WP_REST_Response(
+			array(
+				'status'     => 'queued',
+				'job_id'     => $job_id,
+				'capture_id' => $capture_id,
+			),
+			202
+		);
 	}
 
 	private static function check_rate_limit( object $route ): bool {
@@ -114,7 +134,7 @@ class WRM_Router {
 		$win_end = (int) get_transient( $win_key );
 		if ( ! $win_end || $win_end <= time() ) {
 			// New window — reset counter
-			set_transient( $key,     1,               $window );
+			set_transient( $key, 1, $window );
 			set_transient( $win_key, time() + $window, $window + 5 );
 			return true;
 		}
@@ -130,9 +150,9 @@ class WRM_Router {
 	}
 
 	private static function check_ip_access( object $route, WP_REST_Request $req ): bool {
-		$source_ip  = sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' );
-		$allowlist  = trim( $route->ip_allowlist ?? '' );
-		$blocklist  = trim( $route->ip_blocklist ?? '' );
+		$source_ip = sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' );
+		$allowlist = trim( $route->ip_allowlist ?? '' );
+		$blocklist = trim( $route->ip_blocklist ?? '' );
 
 		// Blocklist takes precedence
 		if ( $blocklist ) {
@@ -161,13 +181,13 @@ class WRM_Router {
 			return $ip === $cidr;
 		}
 		[ $subnet, $prefix ] = explode( '/', $cidr, 2 );
-		$prefix = (int) $prefix;
-		$ip_bin  = inet_pton( $ip );
-		$sub_bin = inet_pton( $subnet );
+		$prefix              = (int) $prefix;
+		$ip_bin              = inet_pton( $ip );
+		$sub_bin             = inet_pton( $subnet );
 		if ( false === $ip_bin || false === $sub_bin || strlen( $ip_bin ) !== strlen( $sub_bin ) ) {
 			return false;
 		}
-		$bits = strlen( $ip_bin ) * 8;
+		$bits   = strlen( $ip_bin ) * 8;
 		$prefix = min( $prefix, $bits );
 		// Compare bit-by-bit using XOR + mask
 		$mask_bin = str_repeat( "\xff", (int) floor( $prefix / 8 ) );
@@ -186,10 +206,10 @@ class WRM_Router {
 		if ( ! $route ) {
 			return array();
 		}
-		$limit    = (int) $route['rate_limit'];
-		$window   = (int) $route['rate_window'];
-		$used     = max( 0, (int) get_transient( $key ) );
-		$win_end  = (int) get_transient( $win_key );
+		$limit   = (int) $route['rate_limit'];
+		$window  = (int) $route['rate_window'];
+		$used    = max( 0, (int) get_transient( $key ) );
+		$win_end = (int) get_transient( $win_key );
 		return array(
 			'route_slug'      => $slug,
 			'rate_limit'      => $limit,
@@ -231,13 +251,13 @@ class WRM_Router {
 		$wpdb->insert(
 			$wpdb->prefix . WRM_Installer::ROUTES_TABLE,
 			array(
-				'slug'        => sanitize_title( $data['slug'] ?? '' ),
-				'label'       => sanitize_text_field( $data['label'] ?? '' ),
-				'methods'     => strtoupper( sanitize_text_field( $data['methods'] ?? 'POST' ) ),
-				'provider'    => sanitize_key( $data['provider'] ?? 'custom' ),
-				'auth_token'  => sanitize_text_field( $data['auth_token'] ?? '' ),
-				'rate_limit'  => (int) ( $data['rate_limit'] ?? 0 ),
-				'rate_window' => (int) ( $data['rate_window'] ?? 60 ),
+				'slug'         => sanitize_title( $data['slug'] ?? '' ),
+				'label'        => sanitize_text_field( $data['label'] ?? '' ),
+				'methods'      => strtoupper( sanitize_text_field( $data['methods'] ?? 'POST' ) ),
+				'provider'     => sanitize_key( $data['provider'] ?? 'custom' ),
+				'auth_token'   => sanitize_text_field( $data['auth_token'] ?? '' ),
+				'rate_limit'   => (int) ( $data['rate_limit'] ?? 0 ),
+				'rate_window'  => (int) ( $data['rate_window'] ?? 60 ),
 				'run_mode'     => in_array( $data['run_mode'] ?? '', array( 'sync', 'async' ), true ) ? $data['run_mode'] : 'async',
 				'mapping_id'   => (int) ( $data['mapping_id'] ?? 0 ),
 				'status'       => 'active',
@@ -254,7 +274,9 @@ class WRM_Router {
 		$allowed = array( 'label', 'methods', 'provider', 'auth_token', 'rate_limit', 'rate_window', 'run_mode', 'mapping_id', 'status', 'ip_allowlist', 'ip_blocklist' );
 		$update  = array();
 		foreach ( $allowed as $key ) {
-			if ( ! array_key_exists( $key, $data ) ) continue;
+			if ( ! array_key_exists( $key, $data ) ) {
+				continue;
+			}
 			$update[ $key ] = match ( $key ) {
 				'label'        => sanitize_text_field( $data[ $key ] ),
 				'methods'      => strtoupper( sanitize_text_field( $data[ $key ] ) ),
@@ -265,8 +287,7 @@ class WRM_Router {
 				'run_mode'     => in_array( $data[ $key ], array( 'sync', 'async' ), true ) ? $data[ $key ] : 'async',
 				'mapping_id'   => (int) $data[ $key ],
 				'status'       => in_array( $data[ $key ], array( 'active', 'paused' ), true ) ? $data[ $key ] : 'active',
-				'ip_allowlist' => sanitize_textarea_field( $data[ $key ] ),
-				'ip_blocklist' => sanitize_textarea_field( $data[ $key ] ),
+				'ip_allowlist', 'ip_blocklist' => sanitize_textarea_field( $data[ $key ] ), // @phpstan-ignore-line
 				default        => sanitize_text_field( $data[ $key ] ),
 			};
 		}

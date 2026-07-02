@@ -143,17 +143,40 @@ class WRM_Mapper {
 			);
 		}
 
-		return array( 'callbacks' => $callbacks, 'hooks' => $hooks );
+		return array(
+			'callbacks' => $callbacks,
+			'hooks'     => $hooks,
+		);
 	}
 
 	public static function apply( int $capture_id, int $mapping_id ): array {
-		WRM_Logger::info( 'mapper', 'Applying mapping', array( 'capture_id' => $capture_id, 'mapping_id' => $mapping_id, 'ref_id' => $capture_id ) );
+		WRM_Logger::info(
+			'mapper',
+			'Applying mapping',
+			array(
+				'capture_id' => $capture_id,
+				'mapping_id' => $mapping_id,
+				'ref_id'     => $capture_id,
+			)
+		);
 
 		try {
 			return self::_apply_inner( $capture_id, $mapping_id );
 		} catch ( \Throwable $e ) {
-			WRM_Logger::exception( 'mapper', $e, array( 'capture_id' => $capture_id, 'mapping_id' => $mapping_id, 'ref_id' => $capture_id ) );
-			return array( 'success' => false, 'error' => $e->getMessage(), 'exception' => get_class( $e ) );
+			WRM_Logger::exception(
+				'mapper',
+				$e,
+				array(
+					'capture_id' => $capture_id,
+					'mapping_id' => $mapping_id,
+					'ref_id'     => $capture_id,
+				)
+			);
+			return array(
+				'success'   => false,
+				'error'     => $e->getMessage(),
+				'exception' => get_class( $e ),
+			);
 		}
 	}
 
@@ -161,19 +184,28 @@ class WRM_Mapper {
 		$capture = WRM_Capture::get( $capture_id );
 		if ( ! $capture ) {
 			WRM_Logger::warning( 'mapper', 'Capture not found', array( 'capture_id' => $capture_id ) );
-			return array( 'success' => false, 'error' => 'capture_not_found' );
+			return array(
+				'success' => false,
+				'error'   => 'capture_not_found',
+			);
 		}
 
 		$mapping_post = get_post( $mapping_id );
 		if ( ! $mapping_post || 'wrm_mapping' !== $mapping_post->post_type ) {
 			WRM_Logger::warning( 'mapper', 'Mapping not found', array( 'mapping_id' => $mapping_id ) );
-			return array( 'success' => false, 'error' => 'mapping_not_found' );
+			return array(
+				'success' => false,
+				'error'   => 'mapping_not_found',
+			);
 		}
 
 		$raw_config = get_post_meta( $mapping_id, 'wrm_config', true );
 		if ( $raw_config && ! json_validate( $raw_config ) ) {
 			WRM_Logger::error( 'mapper', 'Mapping config invalid JSON', array( 'mapping_id' => $mapping_id ) );
-			return array( 'success' => false, 'error' => 'mapping_config_invalid' );
+			return array(
+				'success' => false,
+				'error'   => 'mapping_config_invalid',
+			);
 		}
 		$config = json_decode( $raw_config ?: '{}', true ) ?? array();
 
@@ -208,7 +240,7 @@ class WRM_Mapper {
 		}
 
 		// Build post data from field mapping rules
-		$post_data = array(
+		$post_data      = array(
 			'post_type'   => $cpt,
 			'post_status' => sanitize_key( $config['post_status'] ?? 'publish' ),
 		);
@@ -244,19 +276,33 @@ class WRM_Mapper {
 			}
 		}
 
-		// Create or update the post
+		// Create or update the post (wp_slash returns mixed; cast to array for PHPStan)
 		if ( $existing_id > 0 ) {
 			$post_data['ID'] = $existing_id;
-			$result_id       = wp_update_post( wp_slash( $post_data ), true );
-			$action          = 'updated';
+			/** @var array $slashed */
+			$slashed   = wp_slash( $post_data );
+			$result_id = wp_update_post( $slashed, true );
+			$action    = 'updated';
 		} else {
-			$result_id = wp_insert_post( wp_slash( $post_data ), true );
+			/** @var array $slashed */
+			$slashed   = wp_slash( $post_data );
+			$result_id = wp_insert_post( $slashed, true );
 			$action    = 'created';
 		}
 
 		if ( is_wp_error( $result_id ) ) {
-			WRM_Logger::wp_error( 'mapper', $result_id, array( 'capture_id' => $capture_id, 'mapping_id' => $mapping_id ) );
-			return array( 'success' => false, 'error' => $result_id->get_error_message() );
+			WRM_Logger::wp_error(
+				'mapper',
+				$result_id,
+				array(
+					'capture_id' => $capture_id,
+					'mapping_id' => $mapping_id,
+				)
+			);
+			return array(
+				'success' => false,
+				'error'   => $result_id->get_error_message(),
+			);
 		}
 
 		foreach ( $meta_data as $key => $val ) {
@@ -281,7 +327,16 @@ class WRM_Mapper {
 			$chain_log[] = self::execute_chain( $chain, $result_id, $payload, $context );
 		}
 
-		WRM_Logger::info( 'mapper', 'Mapping applied', array( 'post_id' => $result_id, 'action' => $action, 'capture_id' => $capture_id, 'ref_id' => $capture_id ) );
+		WRM_Logger::info(
+			'mapper',
+			'Mapping applied',
+			array(
+				'post_id'    => $result_id,
+				'action'     => $action,
+				'capture_id' => $capture_id,
+				'ref_id'     => $capture_id,
+			)
+		);
 
 		return array(
 			'success'   => true,
@@ -307,14 +362,16 @@ class WRM_Mapper {
 			return $posts ? (int) $posts[0] : 0;
 		}
 		if ( 'post_title' === $field ) {
-			$posts = get_posts( array(
-				'post_type'      => $cpt,
-				'title'          => sanitize_text_field( (string) $value ),
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'post_status'    => 'any',
-				'no_found_rows'  => true,
-			) );
+			$posts = get_posts(
+				array(
+					'post_type'      => $cpt,
+					'title'          => sanitize_text_field( (string) $value ),
+					'posts_per_page' => 1,
+					'fields'         => 'ids',
+					'post_status'    => 'any',
+					'no_found_rows'  => true,
+				)
+			);
 			return $posts ? (int) $posts[0] : 0;
 		}
 		return 0;
@@ -328,7 +385,11 @@ class WRM_Mapper {
 		if ( ! empty( $chain['conditions'] ) && is_array( $chain['conditions'] ) ) {
 			if ( ! self::evaluate_conditions( $chain['conditions'], $payload, $context ) ) {
 				WRM_Logger::debug( 'mapper', 'Chain skipped — conditions not met', array( 'type' => $type ) );
-				return array( 'type' => $type, 'status' => 'skipped', 'reason' => 'condition_not_met' );
+				return array(
+					'type'   => $type,
+					'status' => 'skipped',
+					'reason' => 'condition_not_met',
+				);
 			}
 		}
 
@@ -346,22 +407,44 @@ class WRM_Mapper {
 				$hook = sanitize_text_field( $chain['hook'] ?? '' );
 				if ( ! $hook || ! isset( self::$allowed_hooks[ $hook ] ) ) {
 					WRM_Logger::warning( 'mapper', 'Blocked unregistered hook', array( 'hook' => $hook ) );
-					return array( 'type' => 'action', 'status' => 'skipped', 'reason' => 'not_registered', 'hook' => $hook );
+					return array(
+						'type'   => 'action',
+						'status' => 'skipped',
+						'reason' => 'not_registered',
+						'hook'   => $hook,
+					);
 				}
 				do_action( $hook, $post_id, $payload, $context );
-				return array( 'type' => 'action', 'hook' => $hook, 'status' => 'fired' );
+				return array(
+					'type'   => 'action',
+					'hook'   => $hook,
+					'status' => 'fired',
+				);
 
 			case 'function':
 				$fn = sanitize_text_field( $chain['function'] ?? '' );
 				if ( ! $fn || ! function_exists( $fn ) || ! isset( self::$allowed_callbacks[ $fn ] ) ) {
 					WRM_Logger::warning( 'mapper', 'Blocked unregistered callback', array( 'function' => $fn ) );
-					return array( 'type' => 'function', 'status' => 'skipped', 'reason' => 'not_registered', 'function' => $fn );
+					return array(
+						'type'     => 'function',
+						'status'   => 'skipped',
+						'reason'   => 'not_registered',
+						'function' => $fn,
+					);
 				}
 				try {
 					$fn_result = call_user_func( $fn, $post_id, $payload, $context );
-					return array( 'type' => 'function', 'function' => $fn, 'result' => $fn_result );
+					return array(
+						'type'     => 'function',
+						'function' => $fn,
+						'result'   => $fn_result,
+					);
 				} catch ( \Throwable $e ) {
-					return array( 'type' => 'function', 'function' => $fn, 'error' => $e->getMessage() );
+					return array(
+						'type'     => 'function',
+						'function' => $fn,
+						'error'    => $e->getMessage(),
+					);
 				}
 
 			case 'dispatcher':
@@ -373,7 +456,11 @@ class WRM_Mapper {
 			case 'mapping':
 				$next_id = (int) ( $chain['mapping_id'] ?? 0 );
 				if ( ! $next_id ) {
-					return array( 'type' => 'mapping', 'status' => 'skipped', 'reason' => 'no_mapping_id' );
+					return array(
+						'type'   => 'mapping',
+						'status' => 'skipped',
+						'reason' => 'no_mapping_id',
+					);
 				}
 				$chain_src = sanitize_key( $chain['chain_source'] ?? 'payload' );
 				$chain_key = sanitize_key( $chain['chain_source_key'] ?? '' );
@@ -388,7 +475,10 @@ class WRM_Mapper {
 						WRM_Logger::warning(
 							'mapper',
 							'chain_source post_meta_json did not decode to an array; falling back to original payload',
-							array( 'meta_key' => $chain_key, 'post_id' => $post_id )
+							array(
+								'meta_key' => $chain_key,
+								'post_id'  => $post_id,
+							)
 						);
 						$chain_payload = $payload;
 					}
@@ -398,13 +488,25 @@ class WRM_Mapper {
 				$syn_capture_id = WRM_Capture::store_internal( '_chain', 'custom', $chain_payload );
 				if ( ! $syn_capture_id ) {
 					WRM_Logger::error( 'mapper', 'Failed to store synthetic chain capture', array( 'mapping_id' => $next_id ) );
-					return array( 'type' => 'mapping', 'mapping_id' => $next_id, 'status' => 'skipped', 'reason' => 'capture_store_failed' );
+					return array(
+						'type'       => 'mapping',
+						'mapping_id' => $next_id,
+						'status'     => 'skipped',
+						'reason'     => 'capture_store_failed',
+					);
 				}
 				$chain_result = self::apply( $syn_capture_id, $next_id );
-				return array( 'type' => 'mapping', 'mapping_id' => $next_id, 'result' => $chain_result );
+				return array(
+					'type'       => 'mapping',
+					'mapping_id' => $next_id,
+					'result'     => $chain_result,
+				);
 
 			default:
-				return array( 'type' => $type, 'status' => 'unknown_type' );
+				return array(
+					'type'   => $type,
+					'status' => 'unknown_type',
+				);
 		}
 	}
 
@@ -428,8 +530,8 @@ class WRM_Mapper {
 				'lte'          => is_numeric( $actual ) && is_numeric( $want ) && (float) $actual <= (float) $want,
 				'contains'     => str_contains( (string) $actual, (string) $want ),
 				'not_contains' => ! str_contains( (string) $actual, (string) $want ),
-				'empty'        => '' === (string) $actual || null === $actual,
-				'not_empty'    => '' !== (string) $actual && null !== $actual,
+				'empty'        => '' === (string) $actual || null === $actual, // @phpstan-ignore-line
+				'not_empty'    => '' !== (string) $actual && null !== $actual, // @phpstan-ignore-line
 				default        => false,
 			};
 
@@ -478,12 +580,21 @@ class WRM_Mapper {
 		$method = strtoupper( sanitize_text_field( $chain['method'] ?? 'POST' ) );
 
 		if ( ! $url ) {
-			return array( 'type' => 'webhook', 'status' => 'skipped', 'reason' => 'no_url' );
+			return array(
+				'type'   => 'webhook',
+				'status' => 'skipped',
+				'reason' => 'no_url',
+			);
 		}
 
 		if ( ! apply_filters( 'wrm_webhook_url_allowed', self::is_safe_url( $url ), $url, $chain ) ) {
 			WRM_Logger::warning( 'mapper', 'Blocked unsafe webhook URL', array( 'url' => $url ) );
-			return array( 'type' => 'webhook', 'status' => 'skipped', 'reason' => 'unsafe_url', 'url' => $url );
+			return array(
+				'type'   => 'webhook',
+				'status' => 'skipped',
+				'reason' => 'unsafe_url',
+				'url'    => $url,
+			);
 		}
 
 		// Body resolution priority: body_builder > body_template > raw payload
@@ -491,7 +602,8 @@ class WRM_Mapper {
 			$body = self::render_body_builder( $chain['body_builder'], $payload, $context );
 		} elseif ( ! empty( $chain['body_template'] ) ) {
 			$rendered = WRM_Merge_Tags::resolve( (string) $chain['body_template'], $context );
-			$body     = ( json_validate( $rendered ) && is_array( $decoded = json_decode( $rendered, true ) ) )
+			$decoded  = json_validate( $rendered ) ? json_decode( $rendered, true ) : null;
+			$body     = is_array( $decoded )
 				? $decoded
 				: array_merge( $payload, array( '_wrm_post_id' => $post_id ) );
 		} else {
@@ -510,7 +622,14 @@ class WRM_Mapper {
 			$extra_headers['X-WRM-Signature'] = 'sha256=' . hash_hmac( 'sha256', (string) $body_json, $chain['signing_secret'] );
 		}
 
-		WRM_Logger::debug( 'mapper', 'Firing webhook chain', array( 'url' => $url, 'method' => $method ) );
+		WRM_Logger::debug(
+			'mapper',
+			'Firing webhook chain',
+			array(
+				'url'    => $url,
+				'method' => $method,
+			)
+		);
 
 		$response = wp_remote_request(
 			$url,
@@ -524,11 +643,22 @@ class WRM_Mapper {
 
 		if ( is_wp_error( $response ) ) {
 			WRM_Logger::error( 'mapper', 'Webhook chain error: ' . $response->get_error_message(), array( 'url' => $url ) );
-			return array( 'type' => 'webhook', 'url' => $url, 'error' => $response->get_error_message() );
+			return array(
+				'type'  => 'webhook',
+				'url'   => $url,
+				'error' => $response->get_error_message(),
+			);
 		}
 
 		$status_code = wp_remote_retrieve_response_code( $response );
-		WRM_Logger::debug( 'mapper', 'Webhook chain response', array( 'url' => $url, 'status_code' => $status_code ) );
+		WRM_Logger::debug(
+			'mapper',
+			'Webhook chain response',
+			array(
+				'url'         => $url,
+				'status_code' => $status_code,
+			)
+		);
 
 		return array(
 			'type'        => 'webhook',
@@ -555,7 +685,12 @@ class WRM_Mapper {
 
 		if ( ! $to || ! is_email( $to ) ) {
 			WRM_Logger::warning( 'mapper', 'Email chain skipped — invalid recipient', array( 'to' => $to ) );
-			return array( 'type' => 'email', 'status' => 'skipped', 'reason' => 'invalid_recipient', 'to' => $to );
+			return array(
+				'type'   => 'email',
+				'status' => 'skipped',
+				'reason' => 'invalid_recipient',
+				'to'     => $to,
+			);
 		}
 
 		// Resolve the body per format. MJML is compiled to responsive HTML.
@@ -584,8 +719,8 @@ class WRM_Mapper {
 					'status'     => 'queued',
 				)
 			);
-			$msg_id = $created['id'];
-			$token  = $created['token'];
+			$msg_id  = $created['id'];
+			$token   = $created['token'];
 			if ( $html && $token ) {
 				$body = WRM_Tracking::instrument_html( $body, $token );
 			}
@@ -612,17 +747,52 @@ class WRM_Mapper {
 		$sent    = wp_mail( $to, $subject, $body, $headers );
 
 		if ( $msg_id ) {
-			WRM_Tracking::update_message( $msg_id, array( 'status' => $sent ? 'sent' : 'failed', 'sent_at' => current_time( 'mysql', true ) ) );
+			WRM_Tracking::update_message(
+				$msg_id,
+				array(
+					'status'  => $sent ? 'sent' : 'failed',
+					'sent_at' => current_time( 'mysql', true ),
+				)
+			);
 			WRM_Tracking::record_event( $msg_id, $sent ? 'sent' : 'failed' );
 		}
 
 		if ( ! $sent ) {
-			WRM_Logger::error( 'mapper', 'Email chain failed to send', array( 'to' => $to, 'subject' => $subject ) );
-			return array( 'type' => 'email', 'status' => 'failed', 'to' => $to, 'message_id' => $msg_id );
+			WRM_Logger::error(
+				'mapper',
+				'Email chain failed to send',
+				array(
+					'to'      => $to,
+					'subject' => $subject,
+				)
+			);
+			return array(
+				'type'       => 'email',
+				'status'     => 'failed',
+				'to'         => $to,
+				'message_id' => $msg_id,
+			);
 		}
 
-		WRM_Logger::info( 'mapper', 'Email chain sent', array( 'to' => $to, 'subject' => $subject, 'format' => $format, 'tracked' => $tracking, 'ref_id' => $post_id ) );
-		return array( 'type' => 'email', 'status' => 'sent', 'to' => $to, 'format' => $format, 'tracked' => $tracking, 'message_id' => $msg_id );
+		WRM_Logger::info(
+			'mapper',
+			'Email chain sent',
+			array(
+				'to'      => $to,
+				'subject' => $subject,
+				'format'  => $format,
+				'tracked' => $tracking,
+				'ref_id'  => $post_id,
+			)
+		);
+		return array(
+			'type'       => 'email',
+			'status'     => 'sent',
+			'to'         => $to,
+			'format'     => $format,
+			'tracked'    => $tracking,
+			'message_id' => $msg_id,
+		);
 	}
 
 	/**
@@ -639,7 +809,11 @@ class WRM_Mapper {
 		$text     = WRM_Merge_Tags::resolve( (string) ( $chain['body'] ?? '' ), $context );
 
 		if ( ! $to || ! $text ) {
-			return array( 'type' => 'sms', 'status' => 'skipped', 'reason' => 'missing_to_or_body' );
+			return array(
+				'type'   => 'sms',
+				'status' => 'skipped',
+				'reason' => 'missing_to_or_body',
+			);
 		}
 
 		// Provider config = the chain itself plus the resolved `from`.
@@ -667,7 +841,16 @@ class WRM_Mapper {
 			$result['message_id_local'] = $created['id'];
 		}
 
-		WRM_Logger::info( 'mapper', 'SMS chain dispatched', array( 'provider' => $provider, 'to' => $to, 'status' => $result['status'] ?? '', 'ref_id' => $post_id ) );
+		WRM_Logger::info(
+			'mapper',
+			'SMS chain dispatched',
+			array(
+				'provider' => $provider,
+				'to'       => $to,
+				'status'   => $result['status'] ?? '',
+				'ref_id'   => $post_id,
+			)
+		);
 
 		return array_merge( array( 'type' => 'sms' ), $result );
 	}
@@ -705,11 +888,11 @@ class WRM_Mapper {
 
 			$rendered = array();
 			foreach ( $items as $item ) {
-				$item_context          = $context;
-				$item_context['item']  = is_array( $item ) ? $item : array( '__value__' => $item );
+				$item_context         = $context;
+				$item_context['item'] = is_array( $item ) ? $item : array( '__value__' => $item );
 				// Support {{item.field}} by injecting item into payload context
 				$item_context['payload']['item'] = $item_context['item'];
-				$rendered[] = WRM_Merge_Tags::resolve( $template, $item_context );
+				$rendered[]                      = WRM_Merge_Tags::resolve( $template, $item_context );
 			}
 
 			if ( strtoupper( $join ) === 'ARRAY' || '' === $join ) {
@@ -726,7 +909,7 @@ class WRM_Mapper {
 		// Object → recurse each value
 		$out = array();
 		foreach ( $node as $key => $val ) {
-			$resolved_key    = WRM_Merge_Tags::resolve( $key, $context );
+			$resolved_key         = WRM_Merge_Tags::resolve( $key, $context );
 			$out[ $resolved_key ] = self::render_body_builder( $val, $payload, $context );
 		}
 		return $out;

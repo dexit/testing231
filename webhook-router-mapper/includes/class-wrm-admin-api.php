@@ -267,10 +267,22 @@ class WRM_Admin_API {
 					'callback'            => array( __CLASS__, 'list_logs' ),
 					'permission_callback' => $cap,
 					'args'                => array(
-						'level'    => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
-						'context'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
-						'per_page' => array( 'type' => 'integer', 'default' => 50 ),
-						'offset'   => array( 'type' => 'integer', 'default' => 0 ),
+						'level'    => array(
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_key',
+						),
+						'context'  => array(
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_key',
+						),
+						'per_page' => array(
+							'type'    => 'integer',
+							'default' => 50,
+						),
+						'offset'   => array(
+							'type'    => 'integer',
+							'default' => 0,
+						),
 					),
 				),
 				array(
@@ -450,6 +462,19 @@ class WRM_Admin_API {
 		);
 
 		// -----------------------------------------------------------------
+		// Demo data seeder
+		// -----------------------------------------------------------------
+		register_rest_route(
+			$ns,
+			'/demo/seed',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'demo_seed' ),
+				'permission_callback' => $cap,
+			)
+		);
+
+		// -----------------------------------------------------------------
 		// Dashboard
 		// -----------------------------------------------------------------
 		register_rest_route(
@@ -534,7 +559,7 @@ class WRM_Admin_API {
 
 	public static function list_routes( WP_REST_Request $req ): WP_REST_Response {
 		$per_page = (int) ( $req->get_param( 'per_page' ) ?? 50 );
-		$offset   = (int) ( $req->get_param( 'offset' )   ?? 0 );
+		$offset   = (int) ( $req->get_param( 'offset' ) ?? 0 );
 		$routes   = WRM_Router::get_routes( max( 1, min( $per_page, 100 ) ), max( 0, $offset ) );
 		return new WP_REST_Response( $routes, 200 );
 	}
@@ -547,7 +572,7 @@ class WRM_Admin_API {
 		}
 
 		$data['ip_allowlist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_allowlist' ) ?? '' ) );
-		$data['ip_blocklist']  = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' )  ?? '' ) );
+		$data['ip_blocklist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' ) ?? '' ) );
 
 		$id = WRM_Router::insert_route( $data );
 		if ( ! $id ) {
@@ -581,7 +606,7 @@ class WRM_Admin_API {
 		}
 
 		$data['ip_allowlist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_allowlist' ) ?? '' ) );
-		$data['ip_blocklist']  = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' )  ?? '' ) );
+		$data['ip_blocklist'] = sanitize_textarea_field( (string) ( $req->get_param( 'ip_blocklist' ) ?? '' ) );
 
 		WRM_Router::update_route( $slug, $data );
 
@@ -602,7 +627,13 @@ class WRM_Admin_API {
 
 		WRM_Logger::info( 'admin', "Route deleted: {$slug}.", array( 'ref_id' => (int) $existing['id'] ) );
 
-		return new WP_REST_Response( array( 'deleted' => true, 'slug' => $slug ), 200 );
+		return new WP_REST_Response(
+			array(
+				'deleted' => true,
+				'slug'    => $slug,
+			),
+			200
+		);
 	}
 
 	public static function pause_route( WP_REST_Request $req ): WP_REST_Response {
@@ -619,9 +650,23 @@ class WRM_Admin_API {
 		// Suspend queued jobs.
 		$jobs_paused = WRM_Job_Queue::pause_route( $slug );
 
-		WRM_Logger::info( 'admin', "Route paused: {$slug}.", array( 'ref_id' => (int) $existing['id'], 'jobs_paused' => $jobs_paused ) );
+		WRM_Logger::info(
+			'admin',
+			"Route paused: {$slug}.",
+			array(
+				'ref_id'      => (int) $existing['id'],
+				'jobs_paused' => $jobs_paused,
+			)
+		);
 
-		return new WP_REST_Response( array( 'paused' => true, 'slug' => $slug, 'jobs_paused' => $jobs_paused ), 200 );
+		return new WP_REST_Response(
+			array(
+				'paused'      => true,
+				'slug'        => $slug,
+				'jobs_paused' => $jobs_paused,
+			),
+			200
+		);
 	}
 
 	public static function resume_route( WP_REST_Request $req ): WP_REST_Response {
@@ -638,9 +683,23 @@ class WRM_Admin_API {
 		// Resume suspended jobs.
 		$jobs_resumed = WRM_Job_Queue::resume_route( $slug );
 
-		WRM_Logger::info( 'admin', "Route resumed: {$slug}.", array( 'ref_id' => (int) $existing['id'], 'jobs_resumed' => $jobs_resumed ) );
+		WRM_Logger::info(
+			'admin',
+			"Route resumed: {$slug}.",
+			array(
+				'ref_id'       => (int) $existing['id'],
+				'jobs_resumed' => $jobs_resumed,
+			)
+		);
 
-		return new WP_REST_Response( array( 'resumed' => true, 'slug' => $slug, 'jobs_resumed' => $jobs_resumed ), 200 );
+		return new WP_REST_Response(
+			array(
+				'resumed'      => true,
+				'slug'         => $slug,
+				'jobs_resumed' => $jobs_resumed,
+			),
+			200
+		);
 	}
 
 	/**
@@ -686,9 +745,9 @@ class WRM_Admin_API {
 
 		return new WP_REST_Response(
 			array(
-				'slug'          => $slug,
-				'captures'      => $capture_count,
-				'jobs'          => $job_count,
+				'slug'           => $slug,
+				'captures'       => $capture_count,
+				'jobs'           => $job_count,
 				'jobs_by_status' => $job_by_status,
 			),
 			200
@@ -701,7 +760,7 @@ class WRM_Admin_API {
 
 	public static function list_mappings( WP_REST_Request $req ): WP_REST_Response {
 		$per_page = (int) ( $req->get_param( 'per_page' ) ?? 50 );
-		$offset   = (int) ( $req->get_param( 'offset' )   ?? 0 );
+		$offset   = (int) ( $req->get_param( 'offset' ) ?? 0 );
 
 		$posts = get_posts(
 			array(
@@ -773,8 +832,8 @@ class WRM_Admin_API {
 			return new WP_REST_Response( array( 'error' => 'Mapping not found.' ), 404 );
 		}
 
-		$data    = $req->get_json_params() ?: array();
-		$update  = array( 'ID' => $id );
+		$data   = $req->get_json_params() ?: array();
+		$update = array( 'ID' => $id );
 
 		if ( ! empty( $data['title'] ) ) {
 			$update['post_title'] = sanitize_text_field( $data['title'] );
@@ -814,7 +873,13 @@ class WRM_Admin_API {
 
 		WRM_Logger::info( 'admin', "Mapping deleted: #{$id}.", array( 'ref_id' => $id ) );
 
-		return new WP_REST_Response( array( 'deleted' => true, 'id' => $id ), 200 );
+		return new WP_REST_Response(
+			array(
+				'deleted' => true,
+				'id'      => $id,
+			),
+			200
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -824,16 +889,16 @@ class WRM_Admin_API {
 	public static function list_captures( WP_REST_Request $req ): WP_REST_Response {
 		$args = array(
 			'per_page'   => (int) ( $req->get_param( 'per_page' ) ?? 30 ),
-			'offset'     => (int) ( $req->get_param( 'offset' )   ?? 0 ),
+			'offset'     => (int) ( $req->get_param( 'offset' ) ?? 0 ),
 			'route_slug' => sanitize_title( (string) ( $req->get_param( 'route_slug' ) ?? '' ) ),
-			'provider'   => sanitize_key( (string) ( $req->get_param( 'provider' )   ?? '' ) ),
+			'provider'   => sanitize_key( (string) ( $req->get_param( 'provider' ) ?? '' ) ),
 		);
 
 		if ( '' !== ( $req->get_param( 'mapped' ) ?? '' ) ) {
 			$args['mapped'] = (int) $req->get_param( 'mapped' );
 		}
 
-		$captures = WRM_Capture::list( array_filter( $args, static fn( $v ) => '' !== $v && null !== $v ) );
+		$captures = WRM_Capture::list( array_filter( $args, static fn( $v ) => '' !== $v && null !== $v ) ); // @phpstan-ignore-line
 		return new WP_REST_Response( $captures, 200 );
 	}
 
@@ -860,7 +925,13 @@ class WRM_Admin_API {
 
 		WRM_Logger::info( 'admin', "Capture deleted: #{$id}.", array( 'ref_id' => $id ) );
 
-		return new WP_REST_Response( array( 'deleted' => true, 'id' => $id ), 200 );
+		return new WP_REST_Response(
+			array(
+				'deleted' => true,
+				'id'      => $id,
+			),
+			200
+		);
 	}
 
 	/**
@@ -886,7 +957,14 @@ class WRM_Admin_API {
 
 		if ( ! empty( $result['success'] ) ) {
 			WRM_Capture::mark_mapped( $id, wp_json_encode( $result ) );
-			WRM_Logger::info( 'admin', "Capture #{$id} applied manually.", array( 'ref_id' => $id, 'mapping_id' => $mapping_id ) );
+			WRM_Logger::info(
+				'admin',
+				"Capture #{$id} applied manually.",
+				array(
+					'ref_id'     => $id,
+					'mapping_id' => $mapping_id,
+				)
+			);
 		}
 
 		return new WP_REST_Response( $result, 200 );
@@ -894,13 +972,19 @@ class WRM_Admin_API {
 
 	public static function capture_paths( WP_REST_Request $req ): WP_REST_Response {
 		$id    = (int) $req->get_param( 'id' );
-		$paths = WRM_Capture::get_paths( $id );
-
-		if ( null === $paths ) {
+		$capture = WRM_Capture::get( $id );
+		if ( null === $capture ) {
 			return new WP_REST_Response( array( 'error' => 'Capture not found.' ), 404 );
 		}
+		$paths = WRM_Capture::get_paths( $id );
 
-		return new WP_REST_Response( array( 'id' => $id, 'paths' => $paths ), 200 );
+		return new WP_REST_Response(
+			array(
+				'id'    => $id,
+				'paths' => $paths,
+			),
+			200
+		);
 	}
 
 	/**
@@ -922,9 +1006,23 @@ class WRM_Admin_API {
 		}
 
 		$job_id = WRM_Job_Queue::enqueue( $capture['route_slug'], $id, $mapping_id );
-		WRM_Logger::info( 'admin', "Capture #{$id} replayed as job #{$job_id}.", array( 'ref_id' => $id, 'mapping_id' => $mapping_id ) );
+		WRM_Logger::info(
+			'admin',
+			"Capture #{$id} replayed as job #{$job_id}.",
+			array(
+				'ref_id'     => $id,
+				'mapping_id' => $mapping_id,
+			)
+		);
 
-		return new WP_REST_Response( array( 'job_id' => $job_id, 'capture_id' => $id, 'mapping_id' => $mapping_id ), 201 );
+		return new WP_REST_Response(
+			array(
+				'job_id'     => $job_id,
+				'capture_id' => $id,
+				'mapping_id' => $mapping_id,
+			),
+			201
+		);
 	}
 
 	/**
@@ -932,7 +1030,7 @@ class WRM_Admin_API {
 	 * Expects JSON body: { "mapping_id": int, "payload": object }
 	 */
 	public static function resubmit_capture( WP_REST_Request $req ): WP_REST_Response {
-		$id      = (int) $req->get_param( 'id' );
+		$id       = (int) $req->get_param( 'id' );
 		$original = WRM_Capture::get( $id );
 		if ( ! $original ) {
 			return new WP_REST_Response( array( 'error' => 'Capture not found.' ), 404 );
@@ -961,11 +1059,20 @@ class WRM_Admin_API {
 		WRM_Logger::info(
 			'admin',
 			"Capture #{$id} resubmitted (edited) as capture #{$new_id}, job #{$job_id}.",
-			array( 'ref_id' => $new_id, 'original_id' => $id, 'mapping_id' => $mapping_id )
+			array(
+				'ref_id'      => $new_id,
+				'original_id' => $id,
+				'mapping_id'  => $mapping_id,
+			)
 		);
 
 		return new WP_REST_Response(
-			array( 'job_id' => $job_id, 'new_capture_id' => $new_id, 'original_capture_id' => $id, 'mapping_id' => $mapping_id ),
+			array(
+				'job_id'              => $job_id,
+				'new_capture_id'      => $new_id,
+				'original_capture_id' => $id,
+				'mapping_id'          => $mapping_id,
+			),
 			201
 		);
 	}
@@ -976,9 +1083,9 @@ class WRM_Admin_API {
 
 	public static function list_jobs( WP_REST_Request $req ): WP_REST_Response {
 		$args = array(
-			'per_page'   => (int) ( $req->get_param( 'per_page' )   ?? 20 ),
-			'offset'     => (int) ( $req->get_param( 'offset' )     ?? 0 ),
-			'status'     => sanitize_key( (string) ( $req->get_param( 'status' )     ?? '' ) ),
+			'per_page'   => (int) ( $req->get_param( 'per_page' ) ?? 20 ),
+			'offset'     => (int) ( $req->get_param( 'offset' ) ?? 0 ),
+			'status'     => sanitize_key( (string) ( $req->get_param( 'status' ) ?? '' ) ),
 			'route_slug' => sanitize_title( (string) ( $req->get_param( 'route_slug' ) ?? '' ) ),
 			'search'     => sanitize_text_field( (string) ( $req->get_param( 'search' ) ?? '' ) ),
 		);
@@ -1014,7 +1121,13 @@ class WRM_Admin_API {
 
 		WRM_Logger::info( 'admin', "Job #{$id} retried via admin API.", array( 'ref_id' => $id ) );
 
-		return new WP_REST_Response( array( 'requeued' => true, 'id' => $id ), 200 );
+		return new WP_REST_Response(
+			array(
+				'requeued' => true,
+				'id'       => $id,
+			),
+			200
+		);
 	}
 
 	/**
@@ -1046,10 +1159,10 @@ class WRM_Admin_API {
 
 	public static function list_logs( WP_REST_Request $req ): WP_REST_Response {
 		$args = array(
-			'level'    => sanitize_key( (string) ( $req->get_param( 'level' )   ?? '' ) ),
+			'level'    => sanitize_key( (string) ( $req->get_param( 'level' ) ?? '' ) ),
 			'context'  => sanitize_key( (string) ( $req->get_param( 'context' ) ?? '' ) ),
 			'per_page' => (int) ( $req->get_param( 'per_page' ) ?? 50 ),
-			'offset'   => (int) ( $req->get_param( 'offset' )   ?? 0 ),
+			'offset'   => (int) ( $req->get_param( 'offset' ) ?? 0 ),
 			'search'   => sanitize_text_field( (string) ( $req->get_param( 'search' ) ?? '' ) ),
 		);
 
@@ -1060,7 +1173,13 @@ class WRM_Admin_API {
 	public static function purge_logs(): WP_REST_Response {
 		$deleted = WRM_Logger::purge( 0 );
 		WRM_Logger::info( 'admin', "All logs purged via API ({$deleted} rows).", array( 'ref_id' => 0 ) );
-		return new WP_REST_Response( array( 'purged' => true, 'deleted' => $deleted ), 200 );
+		return new WP_REST_Response(
+			array(
+				'purged'  => true,
+				'deleted' => $deleted,
+			),
+			200
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -1068,8 +1187,8 @@ class WRM_Admin_API {
 	// -------------------------------------------------------------------------
 
 	public static function list_schedules(): WP_REST_Response {
-		$rows     = WRM_Scheduler::get_all();
-		$base     = rest_url( self::NAMESPACE . '/trigger/' );
+		$rows      = WRM_Scheduler::get_all();
+		$base      = rest_url( self::NAMESPACE . '/trigger/' );
 		$schedules = array_map(
 			static function ( array $row ) use ( $base ): array {
 				$row['trigger_url'] = $base . $row['trigger_token'];
@@ -1106,7 +1225,13 @@ class WRM_Admin_API {
 			return new WP_REST_Response( array( 'error' => 'Schedule not found.' ), 404 );
 		}
 		WRM_Scheduler::delete( $id );
-		return new WP_REST_Response( array( 'deleted' => true, 'id' => $id ), 200 );
+		return new WP_REST_Response(
+			array(
+				'deleted' => true,
+				'id'      => $id,
+			),
+			200
+		);
 	}
 
 	public static function run_schedule( WP_REST_Request $req ): WP_REST_Response {
@@ -1127,9 +1252,9 @@ class WRM_Admin_API {
 	 * limit blunts brute-force attempts.
 	 */
 	public static function trigger_schedule( WP_REST_Request $req ): WP_REST_Response {
-		$ip       = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? '' ) );
-		$rl_key   = 'wrm_trigger_rl_' . md5( $ip );
-		$hits     = (int) get_transient( $rl_key );
+		$ip     = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+		$rl_key = 'wrm_trigger_rl_' . md5( $ip );
+		$hits   = (int) get_transient( $rl_key );
 		if ( $hits >= 30 ) {
 			return new WP_REST_Response( array( 'error' => 'Too many requests.' ), 429 );
 		}
@@ -1144,7 +1269,13 @@ class WRM_Admin_API {
 		}
 
 		$result = WRM_Scheduler::run( $schedule, 'url' );
-		return new WP_REST_Response( array( 'triggered' => true, 'result' => $result ), 200 );
+		return new WP_REST_Response(
+			array(
+				'triggered' => true,
+				'result'    => $result,
+			),
+			200
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -1186,7 +1317,13 @@ class WRM_Admin_API {
 		update_option( WRM_Mapper::OPT_CALLBACKS, array_values( array_filter( $list, static fn( $n ) => $n !== $name ) ) );
 		WRM_Mapper::flush_allowlist_cache();
 		WRM_Logger::info( 'admin', "Callback removed from allowlist: {$name}", array( 'function' => $name ) );
-		return new WP_REST_Response( array( 'removed' => true, 'name' => $name ), 200 );
+		return new WP_REST_Response(
+			array(
+				'removed' => true,
+				'name'    => $name,
+			),
+			200
+		);
 	}
 
 	public static function add_hook( WP_REST_Request $req ): WP_REST_Response {
@@ -1216,7 +1353,13 @@ class WRM_Admin_API {
 		update_option( WRM_Mapper::OPT_HOOKS, array_values( array_filter( $list, static fn( $n ) => $n !== $name ) ) );
 		WRM_Mapper::flush_allowlist_cache();
 		WRM_Logger::info( 'admin', "Hook removed from allowlist: {$name}", array( 'hook' => $name ) );
-		return new WP_REST_Response( array( 'removed' => true, 'name' => $name ), 200 );
+		return new WP_REST_Response(
+			array(
+				'removed' => true,
+				'name'    => $name,
+			),
+			200
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -1226,11 +1369,14 @@ class WRM_Admin_API {
 	public static function route_metrics( WP_REST_Request $req ): WP_REST_Response {
 		$slug  = sanitize_title( $req->get_param( 'slug' ) );
 		$hours = max( 1, min( 168, (int) ( $req->get_param( 'hours' ) ?? 24 ) ) );
-		return new WP_REST_Response( array(
-			'route_slug' => $slug,
-			'hours'      => $hours,
-			'buckets'    => WRM_Metrics::get_hourly( $slug, $hours ),
-		), 200 );
+		return new WP_REST_Response(
+			array(
+				'route_slug' => $slug,
+				'hours'      => $hours,
+				'buckets'    => WRM_Metrics::get_hourly( $slug, $hours ),
+			),
+			200
+		);
 	}
 
 	public static function route_rate_usage( WP_REST_Request $req ): WP_REST_Response {
@@ -1271,6 +1417,27 @@ class WRM_Admin_API {
 	}
 
 	// -------------------------------------------------------------------------
+	// Demo seeder handler
+	// -------------------------------------------------------------------------
+
+	public static function demo_seed( WP_REST_Request $req ): WP_REST_Response {
+		$results = WRM_Demo::seed();
+		$total   = array_sum(
+			array_column(
+				array_filter( $results, 'is_array' ),
+				'inserted'
+			)
+		);
+		return new WP_REST_Response(
+			array(
+				'message' => "Demo data seeded — {$total} items inserted across routes, mappings, captures, jobs, schedules, messages, metrics, and logs.",
+				'details' => $results,
+			),
+			200
+		);
+	}
+
+	// -------------------------------------------------------------------------
 	// Helpers
 	// -------------------------------------------------------------------------
 
@@ -1297,7 +1464,7 @@ class WRM_Admin_API {
 			$wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE created_at >= %s", $today_start )
 		);
 
-		$job_rows = $wpdb->get_results(
+		$job_rows   = $wpdb->get_results(
 			"SELECT status, COUNT(*) AS cnt FROM {$jobs_table} GROUP BY status",
 			ARRAY_A
 		) ?? array();
@@ -1381,13 +1548,13 @@ class WRM_Admin_API {
 		return new WP_REST_Response(
 			array(
 				'stats'           => array(
-					'active_routes'       => $active_routes,
-					'captures_today'      => $captures_today,
-					'jobs'                => $job_counts,
-					'messages_today'      => $messages_today,
-					'errors_today'        => $error_today,
-					'sig_verified_today'  => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'verified' AND created_at >= %s", $today_start ) ),
-					'sig_failed_today'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'failed' AND created_at >= %s", $today_start ) ),
+					'active_routes'      => $active_routes,
+					'captures_today'     => $captures_today,
+					'jobs'               => $job_counts,
+					'messages_today'     => $messages_today,
+					'errors_today'       => $error_today,
+					'sig_verified_today' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'verified' AND created_at >= %s", $today_start ) ),
+					'sig_failed_today'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$captures_table} WHERE sig_status = 'failed' AND created_at >= %s", $today_start ) ),
 				),
 				'pipelines'       => $pipelines,
 				'recent_failures' => $recent_failures,

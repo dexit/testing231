@@ -64,19 +64,19 @@ class WRM_Elementor {
 		// Flatten Elementor field array: [ id => value, label => value ]
 		$raw_fields = (array) $record->get( 'fields' );
 		$payload    = array(
-			'_form_name'     => $form_name,
-			'_form_id'       => $record->get_form_settings( 'id' ) ?? '',
-			'_submitted_on'  => gmdate( 'Y-m-d H:i:s' ),
-			'fields'         => array(),
+			'_form_name'    => $form_name,
+			'_form_id'      => $record->get_form_settings( 'id' ) ?? '',
+			'_submitted_on' => gmdate( 'Y-m-d H:i:s' ),
+			'fields'        => array(),
 		);
 
 		foreach ( $raw_fields as $field_id => $field ) {
-			$field_id = sanitize_key( (string) $field_id );
-			$value    = $field['value'] ?? '';
-			$payload['fields'][ $field_id ]          = $value;
+			$field_id                       = sanitize_key( (string) $field_id );
+			$value                          = $field['value'] ?? '';
+			$payload['fields'][ $field_id ] = $value;
 			// Also expose by label for convenience: e.g. payload.email
-			$label                                   = sanitize_key( (string) ( $field['label'] ?? $field_id ) );
-			$payload[ $label ]                       = $value;
+			$label             = sanitize_key( (string) ( $field['label'] ?? $field_id ) );
+			$payload[ $label ] = $value;
 		}
 
 		// Normalize via the WRM provider layer so custom normalizers can hook in.
@@ -88,7 +88,10 @@ class WRM_Elementor {
 			WRM_Logger::error(
 				'elementor',
 				'Failed to store capture for Elementor form.',
-				array( 'form_name' => $form_name, 'route_slug' => $route_slug )
+				array(
+					'form_name'  => $form_name,
+					'route_slug' => $route_slug,
+				)
 			);
 			return;
 		}
@@ -165,7 +168,7 @@ class WRM_Elementor {
 	/**
 	 * Prevent Elementor from offering to edit wrm_mapping posts in its editor.
 	 *
-	 * @param string   $url      Edit URL.
+	 * @param string                            $url      Edit URL.
 	 * @param \Elementor\Core\Documents_Manager $document Document.
 	 * @return string
 	 */

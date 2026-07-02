@@ -62,7 +62,7 @@ class WRM_Job_Queue {
 	 * on local/staging environments.
 	 */
 	private static function spawn_cron(): void {
-		if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+		if ( wp_doing_cron() ) {
 			return; // Already inside a cron run — no need to re-spawn.
 		}
 
@@ -308,7 +308,10 @@ class WRM_Job_Queue {
 			WRM_Logger::exception(
 				'queue',
 				$e,
-				array( 'ref_id' => $job_id, 'attempt' => $attempt )
+				array(
+					'ref_id'  => $job_id,
+					'attempt' => $attempt,
+				)
 			);
 			self::mark_failed( $job_id, $e->getMessage(), $attempt, $max_attempts, $job['route_slug'] ?? '' );
 		}
@@ -401,36 +404,41 @@ class WRM_Job_Queue {
 		$table = $wpdb->prefix . WRM_Installer::JOBS_TABLE;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$job = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $job_id ), ARRAY_A );
-		if ( ! $job ) { return; }
+		if ( ! $job ) {
+			return; }
 
 		$mapping_post = get_post( (int) $job['mapping_id'] );
-		if ( ! $mapping_post ) { return; }
+		if ( ! $mapping_post ) {
+			return; }
 
 		$raw_config = get_post_meta( (int) $job['mapping_id'], 'wrm_config', true );
 		$config     = json_decode( $raw_config ?: '{}', true ) ?? array();
 		$dlq_route  = sanitize_title( $config['dead_letter_route'] ?? '' );
-		if ( ! $dlq_route ) { return; }
+		if ( ! $dlq_route ) {
+			return; }
 
 		// Get the original capture payload
 		$cap_table = $wpdb->prefix . WRM_Installer::CAPTURES_TABLE;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$cap = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$cap_table} WHERE id = %d", (int) $job['capture_id'] ), ARRAY_A );
-		if ( ! $cap ) { return; }
+		if ( ! $cap ) {
+			return; }
 
 		$payload = json_validate( $cap['payload'] ) ? ( json_decode( $cap['payload'], true ) ?? array() ) : array();
 		// Wrap in dead-letter envelope
 		$dlq_payload = array(
-			'_dlq'        => true,
-			'_job_id'     => $job_id,
-			'_route'      => $job['route_slug'],
-			'_error'      => $job['error_message'],
-			'_attempt'    => $job['attempt'],
-			'original'    => $payload,
+			'_dlq'     => true,
+			'_job_id'  => $job_id,
+			'_route'   => $job['route_slug'],
+			'_error'   => $job['error_message'],
+			'_attempt' => $job['attempt'],
+			'original' => $payload,
 		);
 
 		// Store a new capture on the DLQ route
 		$dlq_capture_id = WRM_Capture::store_internal( $dlq_route, 'dlq', $dlq_payload );
-		if ( ! $dlq_capture_id ) { return; }
+		if ( ! $dlq_capture_id ) {
+			return; }
 
 		// Find the DLQ route's mapping_id
 		$routes_table = $wpdb->prefix . WRM_Installer::ROUTES_TABLE;
@@ -511,7 +519,11 @@ class WRM_Job_Queue {
 		WRM_Logger::info(
 			'queue',
 			"Route '{$slug}' paused: {$count} job(s) suspended.",
-			array( 'ref_id' => 0, 'route_slug' => $slug, 'count' => $count )
+			array(
+				'ref_id'     => 0,
+				'route_slug' => $slug,
+				'count'      => $count,
+			)
 		);
 
 		return $count;
@@ -557,7 +569,11 @@ class WRM_Job_Queue {
 		WRM_Logger::info(
 			'queue',
 			"Route '{$slug}' resumed: {$count} job(s) re-queued.",
-			array( 'ref_id' => 0, 'route_slug' => $slug, 'count' => $count )
+			array(
+				'ref_id'     => 0,
+				'route_slug' => $slug,
+				'count'      => $count,
+			)
 		);
 
 		return $count;
